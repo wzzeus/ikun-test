@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   webhook:
     build: .
@@ -17,9 +15,3 @@ services:
       # 挂载日志目录
       - ./logs:/app/logs
     working_dir: /opt/chicken-king
-    networks:
-      - chicken-king-network
-
-networks:
-  chicken-king-network:
-    external: true
