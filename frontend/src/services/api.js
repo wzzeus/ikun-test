@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/authStore'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'
+// 生产环境使用相对路径（nginx 会代理到后端），开发环境使用完整 URL
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1'
 
 /**
  * Axios 实例
