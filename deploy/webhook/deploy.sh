@@ -36,16 +36,22 @@ $DOCKER_COMPOSE down
 $DOCKER_COMPOSE build --no-cache
 $DOCKER_COMPOSE up -d
 
-# 3. 等待服务启动
+# 3. 等待服务启动并健康检查
 log "等待服务启动..."
-sleep 10
+MAX_RETRIES=12
+RETRY_COUNT=0
+while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+    sleep 5
+    if curl -s http://localhost:8000/health | grep -q "ok"; then
+        log "✅ 后端服务正常"
+        break
+    fi
+    RETRY_COUNT=$((RETRY_COUNT + 1))
+    log "等待后端启动... ($RETRY_COUNT/$MAX_RETRIES)"
+done
 
-# 4. 健康检查
-log "执行健康检查..."
-if curl -s http://localhost:8000/health | grep -q "ok"; then
-    log "✅ 后端服务正常"
-else
-    log "⚠️ 后端服务可能还在启动中"
+if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+    log "⚠️ 后端服务启动超时，请手动检查"
 fi
 
 # 5. 清理旧镜像
