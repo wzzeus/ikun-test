@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  webhook:
+    build: .
+    container_name: chicken-king-webhook
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET:-your-webhook-secret-change-me}
+    volumes:
+      # 挂载项目目录，用于执行 git pull
+      - /opt/chicken-king:/opt/chicken-king
+      # 挂载 docker socket，用于执行 docker compose
+      - /var/run/docker.sock:/var/run/docker.sock
+      # 挂载日志目录
+      - ./logs:/app/logs
+    working_dir: /opt/chicken-king
+    networks:
+      - chicken-king-network
+
+networks:
+  chicken-king-network:
+    external: true
