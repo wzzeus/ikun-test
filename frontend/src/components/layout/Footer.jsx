@@ -1,9 +1,9 @@
 /**
  * 页脚组件
- * 隐藏彩蛋：连续点击版权文字 7 次可触发彩蛋入口
+ * 趣味交互：连续点击版权文字 7 次触发彩蛋弹窗
  */
 import { useState, useRef, useCallback, useEffect } from 'react'
-import EasterEggModal from '../easter-egg/EasterEggModal'
+import EasterEggModal from '../activity/EasterEggModal'
 
 // 练习时长提示语（iKun 梗）
 const HINT_MESSAGES = [
@@ -14,7 +14,7 @@ const HINT_MESSAGES = [
   '喜欢唱...', // 4
   '跳...', // 5
   'Rap...', // 6
-  '🏀', // 7 触发
+  '🏀 鸡你太美！', // 7 完成
 ]
 
 // 音效频率（模拟音阶上升）
@@ -71,9 +71,9 @@ const playSuccessSound = () => {
 }
 
 export default function Footer() {
-  const [easterEggOpen, setEasterEggOpen] = useState(false)
   const [hint, setHint] = useState('')
   const [clickCount, setClickCount] = useState(0)
+  const [showEasterEgg, setShowEasterEgg] = useState(false)
   const clickTimerRef = useRef(null)
   const hintTimerRef = useRef(null)
 
@@ -85,7 +85,7 @@ export default function Footer() {
     }
   }, [])
 
-  // 彩蛋触发：连续点击 7 次
+  // 趣味交互：连续点击 7 次
   const handleSecretClick = useCallback(() => {
     const newCount = clickCount + 1
     setClickCount(newCount)
@@ -98,9 +98,9 @@ export default function Footer() {
     // 显示提示
     if (newCount <= 7) {
       setHint(HINT_MESSAGES[newCount])
-      // 提示 1.5 秒后消失
+      // 提示 2 秒后消失
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
-      hintTimerRef.current = setTimeout(() => setHint(''), 1500)
+      hintTimerRef.current = setTimeout(() => setHint(''), newCount >= 7 ? 3000 : 1500)
     }
 
     // 清除之前的重置定时器
@@ -112,11 +112,14 @@ export default function Footer() {
       setHint('')
     }, 3000)
 
-    // 达到 7 次触发彩蛋
+    // 达到 7 次播放成功音效并显示彩蛋弹窗
     if (newCount >= 7) {
-      playSuccessSound() // 成功音效
+      playSuccessSound()
       setClickCount(0)
-      setTimeout(() => setEasterEggOpen(true), 500)
+      // 延迟一点显示弹窗，让动画效果先展示
+      setTimeout(() => {
+        setShowEasterEgg(true)
+      }, 500)
     }
   }, [clickCount])
 
@@ -155,8 +158,8 @@ export default function Footer() {
 
       {/* 彩蛋弹窗 */}
       <EasterEggModal
-        isOpen={easterEggOpen}
-        onClose={() => setEasterEggOpen(false)}
+        isOpen={showEasterEgg}
+        onClose={() => setShowEasterEgg(false)}
       />
     </>
   )

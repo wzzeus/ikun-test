@@ -314,7 +314,7 @@ function ExchangeHistoryModal({ onClose }) {
 }
 
 // 主组件
-export default function ExchangeShop({ onBalanceUpdate }) {
+export default function ExchangeShop({ balance: externalBalance, onBalanceUpdate }) {
   const toast = useToast()
   const [loading, setLoading] = useState(true)
   const [items, setItems] = useState([])
@@ -322,6 +322,9 @@ export default function ExchangeShop({ onBalanceUpdate }) {
   const [exchanging, setExchanging] = useState(false)
   const [exchangeResult, setExchangeResult] = useState(null)
   const [showHistory, setShowHistory] = useState(false)
+
+  // 优先使用外部传入的余额，实现实时同步
+  const currentBalance = externalBalance ?? userInfo?.balance ?? 0
 
   // 加载数据
   const loadData = useCallback(async () => {
@@ -450,7 +453,7 @@ export default function ExchangeShop({ onBalanceUpdate }) {
             <ExchangeItemCard
               key={item.id}
               item={item}
-              userInfo={userInfo}
+              userInfo={{ ...userInfo, balance: currentBalance }}
               onExchange={handleExchange}
               exchanging={exchanging}
             />

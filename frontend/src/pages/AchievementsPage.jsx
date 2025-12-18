@@ -42,6 +42,7 @@ const BADGE_ICONS = {
   search: Search,
   gem: Gem,
   crown: Crown,
+  sparkles: Sparkles,
 }
 
 // 稀有度颜色
@@ -75,6 +76,18 @@ const TIER_COLORS = {
     border: 'border-cyan-400',
     text: 'text-cyan-600 dark:text-cyan-400',
     glow: 'shadow-cyan-500/40',
+  },
+  star: {
+    bg: 'bg-pink-100 dark:bg-pink-900/30',
+    border: 'border-pink-500',
+    text: 'text-pink-600 dark:text-pink-400',
+    glow: 'shadow-pink-500/50',
+  },
+  king: {
+    bg: 'bg-gradient-to-br from-red-100 to-orange-100 dark:from-red-900/30 dark:to-orange-900/30',
+    border: 'border-red-500',
+    text: 'text-red-600 dark:text-red-400',
+    glow: 'shadow-red-500/60',
   },
 }
 

@@ -12,7 +12,12 @@ export const useAuthStore = create(
       // 记录用户的原始角色（用于管理员角色切换功能）
       originalRole: null,
 
-      setUser: (user) => set({ user }),
+      setUser: (user) => {
+        // 更新用户时，如果后端返回了 original_role，同步更新 originalRole
+        const currentOriginalRole = get().originalRole
+        const newOriginalRole = user?.original_role || currentOriginalRole
+        set({ user, originalRole: newOriginalRole })
+      },
       setToken: (token) => set({ token }),
       setOriginalRole: (role) => set({ originalRole: role }),
 

@@ -1555,20 +1555,63 @@ function ApiKeyPanel() {
   const [newKey, setNewKey] = useState({ code: '', quota: '', description: '' })
   const [batchData, setBatchData] = useState({ codes: '', quota: '', description: '' })
 
+  // 分页状态
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const pageSize = 10
+
+  // 筛选状态
+  const [filterDesc, setFilterDesc] = useState('')
+  const [filterUsername, setFilterUsername] = useState('')
+
   useEffect(() => {
     loadKeys()
-  }, [])
+  }, [page])
 
   const loadKeys = async () => {
+    setLoading(true)
     try {
-      const data = await adminApi2.getApiKeys({ limit: 50 })
+      const offset = (page - 1) * pageSize
+      const params = { limit: pageSize, offset }
+      if (filterDesc.trim()) params.description = filterDesc.trim()
+      if (filterUsername.trim()) params.username = filterUsername.trim()
+
+      const data = await adminApi2.getApiKeys(params)
       setKeys(data.items)
+      setTotal(data.total || 0)
     } catch (error) {
       toast.error('加载失败')
     } finally {
       setLoading(false)
     }
   }
+
+  // 筛选搜索
+  const handleSearch = () => {
+    setPage(1)
+    loadKeys()
+  }
+
+  // 清空筛选
+  const handleClearFilter = async () => {
+    setFilterDesc('')
+    setFilterUsername('')
+    setPage(1)
+    // 直接用空参数请求
+    setLoading(true)
+    try {
+      const data = await adminApi2.getApiKeys({ limit: pageSize, offset: 0 })
+      setKeys(data.items)
+      setTotal(data.total || 0)
+    } catch (error) {
+      toast.error('加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // 计算总页数
+  const totalPages = Math.ceil(total / pageSize)
 
   const handleAddKey = async () => {
     if (!newKey.code) {
@@ -1597,7 +1640,13 @@ function ApiKeyPanel() {
     try {
       await adminApi2.deleteApiKey(id)
       toast.success('删除成功')
-      loadKeys()
+
+      // 如果当前页只剩一条数据，删除后回退到上一页
+      if (keys.length === 1 && page > 1) {
+        setPage(page - 1)
+      } else {
+        loadKeys()
+      }
     } catch (error) {
       toast.error('删除失败')
     }
@@ -1650,22 +1699,59 @@ function ApiKeyPanel() {
 
   return (
     <div>
-      {/* 添加按钮 */}
-      <div className="flex justify-end gap-3 mb-4">
-        <button
-          onClick={() => setShowBatchAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-        >
-          <Plus className="w-4 h-4" />
-          批量添加
-        </button>
-        <button
-          onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
-        >
-          <Plus className="w-4 h-4" />
-          添加兑换码
-        </button>
+      {/* 筛选和添加按钮 */}
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        {/* 筛选输入 */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <input
+            type="text"
+            placeholder="按描述筛选"
+            value={filterDesc}
+            onChange={(e) => setFilterDesc(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 w-40"
+          />
+          <input
+            type="text"
+            placeholder="按用户名筛选"
+            value={filterUsername}
+            onChange={(e) => setFilterUsername(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="px-3 py-2 text-sm rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 w-40"
+          />
+          <button
+            onClick={handleSearch}
+            className="px-4 py-2 text-sm bg-slate-600 text-white rounded-lg hover:bg-slate-700"
+          >
+            搜索
+          </button>
+          {(filterDesc || filterUsername) && (
+            <button
+              onClick={handleClearFilter}
+              className="px-4 py-2 text-sm bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-300 dark:hover:bg-slate-600"
+            >
+              清空筛选
+            </button>
+          )}
+        </div>
+
+        {/* 添加按钮 */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowBatchAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+          >
+            <Plus className="w-4 h-4" />
+            批量添加
+          </button>
+          <button
+            onClick={() => setShowAdd(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+          >
+            <Plus className="w-4 h-4" />
+            添加兑换码
+          </button>
+        </div>
       </div>
 
       {/* 列表 */}
@@ -1677,6 +1763,7 @@ function ApiKeyPanel() {
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">兑换码</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">额度</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">状态</th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">分配给</th>
               <th className="px-4 py-3 text-left text-sm font-medium text-slate-600">描述</th>
               <th className="px-4 py-3 text-right text-sm font-medium text-slate-600">操作</th>
             </tr>
@@ -1684,11 +1771,11 @@ function ApiKeyPanel() {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {loading ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">加载中...</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">加载中...</td>
               </tr>
             ) : keys.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">暂无兑换码</td>
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">暂无兑换码</td>
               </tr>
             ) : (
               keys.map((key) => (
@@ -1700,6 +1787,13 @@ function ApiKeyPanel() {
                     <span className={`px-2 py-1 rounded text-xs font-medium ${statusMap[key.status]?.color}`}>
                       {statusMap[key.status]?.label}
                     </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    {key.assigned_username ? (
+                      <span className="text-blue-600 dark:text-blue-400 font-medium">{key.assigned_username}</span>
+                    ) : (
+                      <span className="text-slate-400">-</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-500 text-sm">{key.description || '-'}</td>
                   <td className="px-4 py-3 text-right">
@@ -1715,6 +1809,31 @@ function ApiKeyPanel() {
             )}
           </tbody>
         </table>
+
+        {/* 分页控件 */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50">
+            <div className="text-sm text-slate-500">
+              共 {total} 条，第 {page} / {totalPages} 页
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="px-3 py-1.5 text-sm rounded-lg border border-slate-300 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                上一页
+              </button>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                className="px-3 py-1.5 text-sm rounded-lg border border-slate-300 dark:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700"
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 添加弹窗 */}
@@ -1746,14 +1865,20 @@ function ApiKeyPanel() {
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">描述</label>
-                <input
-                  type="text"
+                <label className="block text-sm font-medium text-slate-700 mb-1">用途</label>
+                <select
                   value={newKey.description}
                   onChange={(e) => setNewKey({ ...newKey, description: e.target.value })}
-                  placeholder="可选"
-                  className="w-full px-3 py-2 rounded-lg border"
-                />
+                  className="w-full px-3 py-2 rounded-lg border dark:border-slate-700 dark:bg-slate-800"
+                >
+                  <option value="">请选择用途</option>
+                  <option value="抽奖">抽奖</option>
+                  <option value="彩蛋">彩蛋</option>
+                  <option value="扭蛋机">扭蛋机</option>
+                  <option value="刮刮乐">刮刮乐</option>
+                  <option value="老虎机">老虎机</option>
+                  <option value="积分兑换">积分兑换</option>
+                </select>
               </div>
             </div>
 
@@ -1812,15 +1937,20 @@ function ApiKeyPanel() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                  统一描述
+                  用途
                 </label>
-                <input
-                  type="text"
+                <select
                   value={batchData.description}
                   onChange={(e) => setBatchData({ ...batchData, description: e.target.value })}
-                  placeholder="抽奖"
                   className="w-full px-3 py-2 rounded-lg border dark:border-slate-700 dark:bg-slate-800"
-                />
+                >
+                  <option value="抽奖">抽奖</option>
+                  <option value="彩蛋">彩蛋</option>
+                  <option value="扭蛋机">扭蛋机</option>
+                  <option value="刮刮乐">刮刮乐</option>
+                  <option value="老虎机">老虎机</option>
+                  <option value="积分兑换">积分兑换</option>
+                </select>
               </div>
             </div>
 

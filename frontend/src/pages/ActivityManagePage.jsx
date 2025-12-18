@@ -27,7 +27,6 @@ import {
   Dice5,
   Star,
   Percent,
-  Egg,
   Key,
   Award,
   Ban,
@@ -1107,55 +1106,63 @@ function LotteryConfigPanel() {
 
           {/* 奖品列表 */}
           <div className="space-y-2">
-            <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">奖品池</p>
-            {config.prizes?.map((prize) => (
-              <div key={prize.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                    prize.is_rare ? 'bg-gradient-to-br from-yellow-400 to-orange-500' : 'bg-slate-200 dark:bg-slate-700'
-                  }`}>
-                    {prize.is_rare ? <Star className="w-5 h-5 text-white" /> : <Gift className="w-5 h-5 text-slate-500" />}
+            <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">奖品池（点击编辑按钮修改权重控制概率）</p>
+            {config.prizes?.map((prize) => {
+              const totalWeight = config.prizes?.reduce((sum, p) => sum + (p.weight || 0), 0) || 1
+              const probability = ((prize.weight / totalWeight) * 100).toFixed(1)
+              return (
+                <div key={prize.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                      prize.is_rare ? 'bg-gradient-to-br from-yellow-400 to-orange-500' : 'bg-slate-200 dark:bg-slate-700'
+                    }`}>
+                      {prize.is_rare ? <Star className="w-5 h-5 text-white" /> : <Gift className="w-5 h-5 text-slate-500" />}
+                    </div>
+                    <div>
+                      <p className="font-medium text-slate-800 dark:text-white">{prize.prize_name || prize.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {PRIZE_TYPE_MAP[prize.prize_type] || prize.prize_type || prize.type} | 权重: {prize.weight} | 概率: {probability}% | 库存: {prize.stock ?? '无限'}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="font-medium text-slate-800 dark:text-white">{prize.prize_name || prize.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {PRIZE_TYPE_MAP[prize.prize_type] || prize.prize_type || prize.type} | 权重: {prize.weight} | 库存: {prize.stock ?? '无限'}
-                    </p>
+                  <div className="flex items-center gap-2">
+                    {editingPrize === prize.id ? (
+                      <>
+                        <input
+                          type="number"
+                          defaultValue={prize.weight}
+                          min="1"
+                          className="w-20 px-2 py-1 text-sm rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white"
+                          id={`weight-${prize.id}`}
+                        />
+                        <button
+                          onClick={() => handleUpdatePrize(prize.id, { weight: parseInt(document.getElementById(`weight-${prize.id}`).value) || 1 })}
+                          className="p-1.5 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
+                          title="保存"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setEditingPrize(null)}
+                          className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                          title="取消"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setEditingPrize(prize.id)}
+                        className="p-1.5 text-slate-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg"
+                        title="编辑权重"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  {editingPrize === prize.id ? (
-                    <>
-                      <input
-                        type="number"
-                        defaultValue={prize.weight}
-                        className="w-20 px-2 py-1 text-sm rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600"
-                        id={`weight-${prize.id}`}
-                      />
-                      <button
-                        onClick={() => handleUpdatePrize(prize.id, { weight: parseInt(document.getElementById(`weight-${prize.id}`).value) })}
-                        className="p-1.5 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setEditingPrize(null)}
-                        className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => setEditingPrize(prize.id)}
-                      className="p-1.5 text-slate-400 hover:text-purple-500 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       ))}
@@ -1350,397 +1357,6 @@ function ExchangeManagePanel() {
   )
 }
 
-// 彩蛋管理面板
-const REWARD_TYPES = [
-  { value: 'points', label: '积分', icon: Coins, color: 'text-yellow-500' },
-  { value: 'item', label: '道具', icon: Package, color: 'text-blue-500' },
-  { value: 'badge', label: '徽章', icon: Award, color: 'text-purple-500' },
-  { value: 'api_key', label: 'API Key', icon: Key, color: 'text-green-500' },
-]
-
-const ITEM_TYPES = [
-  { value: 'cheer', label: '爱心打气' },
-  { value: 'coffee', label: '咖啡' },
-  { value: 'energy', label: '能量' },
-  { value: 'pizza', label: '披萨' },
-  { value: 'star', label: '星星' },
-]
-
-function getStatusStyle(status) {
-  switch (status) {
-    case 'active':
-      return 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-    case 'claimed':
-      return 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
-    case 'disabled':
-      return 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400'
-    case 'expired':
-      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-    default:
-      return 'bg-gray-100 text-gray-700'
-  }
-}
-
-function getStatusText(status) {
-  switch (status) {
-    case 'active': return '可用'
-    case 'claimed': return '已领取'
-    case 'disabled': return '已禁用'
-    case 'expired': return '已过期'
-    default: return status
-  }
-}
-
-function formatReward(type, value) {
-  if (!value) return '-'
-  switch (type) {
-    case 'points':
-      return `${value.amount || 0} 积分`
-    case 'item':
-      const itemLabel = ITEM_TYPES.find(i => i.value === value.item_type)?.label || value.item_type
-      return `${value.amount || 1}x ${itemLabel}`
-    case 'badge':
-      return value.badge_name || value.badge_key
-    case 'api_key':
-      return 'API Key'
-    default:
-      return JSON.stringify(value)
-  }
-}
-
-function EasterEggPanel() {
-  const toast = useToast()
-  const [codes, setCodes] = useState([])
-  const [stats, setStats] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [creating, setCreating] = useState(false)
-
-  const [newCode, setNewCode] = useState({
-    code: '',
-    reward_type: 'points',
-    reward_value: { amount: 100 },
-    description: '',
-    hint: '',
-  })
-
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      const [codesRes, statsRes] = await Promise.all([
-        api.get('/easter-egg/admin/list'),
-        api.get('/easter-egg/admin/stats'),
-      ])
-      setCodes(codesRes.items || [])
-      setStats(statsRes)
-    } catch (err) {
-      toast.error(err.response?.data?.detail || '加载失败')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  const handleCreate = async (e) => {
-    e.preventDefault()
-    if (!newCode.code.trim()) return
-
-    setCreating(true)
-    try {
-      await api.post('/easter-egg/admin/create', {
-        code: newCode.code.trim().toUpperCase(),
-        reward_type: newCode.reward_type,
-        reward_value: newCode.reward_value,
-        description: newCode.description || null,
-        hint: newCode.hint || null,
-      })
-      setNewCode({
-        code: '',
-        reward_type: 'points',
-        reward_value: { amount: 100 },
-        description: '',
-        hint: '',
-      })
-      setShowCreateForm(false)
-      toast.success('彩蛋码创建成功')
-      loadData()
-    } catch (err) {
-      toast.error(err.response?.data?.detail || '创建失败')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  const handleDisable = async (codeId) => {
-    if (!confirm('确定要禁用这个彩蛋码吗？')) return
-    try {
-      await api.put(`/easter-egg/admin/${codeId}/disable`)
-      toast.success('已禁用')
-      loadData()
-    } catch (err) {
-      toast.error(err.response?.data?.detail || '禁用失败')
-    }
-  }
-
-  const updateRewardValue = (type, field, value) => {
-    if (type === 'points') {
-      setNewCode(prev => ({ ...prev, reward_value: { amount: parseInt(value) || 0 } }))
-    } else if (type === 'item') {
-      setNewCode(prev => ({
-        ...prev,
-        reward_value: { ...prev.reward_value, [field]: field === 'amount' ? (parseInt(value) || 1) : value }
-      }))
-    } else if (type === 'badge') {
-      setNewCode(prev => ({ ...prev, reward_value: { ...prev.reward_value, [field]: value } }))
-    }
-  }
-
-  const handleRewardTypeChange = (type) => {
-    let defaultValue = {}
-    switch (type) {
-      case 'points': defaultValue = { amount: 100 }; break
-      case 'item': defaultValue = { item_type: 'cheer', amount: 1 }; break
-      case 'badge': defaultValue = { badge_key: '', badge_name: '' }; break
-      case 'api_key': defaultValue = {}; break
-    }
-    setNewCode(prev => ({ ...prev, reward_type: type, reward_value: defaultValue }))
-  }
-
-  if (loading) {
-    return <div className="flex items-center justify-center py-20"><RefreshCw className="w-8 h-8 animate-spin text-purple-500" /></div>
-  }
-
-  return (
-    <div className="space-y-6">
-      {/* 统计卡片 */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard title="总彩蛋码" value={stats.total_codes || 0} icon={Egg} color="purple" />
-          <StatCard title="可用" value={stats.active_codes || 0} icon={Check} color="green" />
-          <StatCard title="已领取" value={stats.claimed_codes || 0} icon={Gift} color="blue" />
-          <StatCard title="已禁用/过期" value={(stats.disabled_codes || 0) + (stats.expired_codes || 0)} icon={Ban} color="orange" />
-        </div>
-      )}
-
-      {/* 工具栏 */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={loadData}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 text-sm text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          刷新
-        </button>
-        <button
-          onClick={() => setShowCreateForm(!showCreateForm)}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all text-sm font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          新增彩蛋码
-        </button>
-      </div>
-
-      {/* 创建表单 */}
-      {showCreateForm && (
-        <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
-          <h3 className="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-            <Egg className="w-5 h-5 text-purple-500" />
-            创建新彩蛋码
-          </h3>
-          <form onSubmit={handleCreate} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">兑换码 *</label>
-                <input
-                  type="text"
-                  value={newCode.code}
-                  onChange={(e) => setNewCode(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
-                  placeholder="如: IKUN-EGG-XXXX"
-                  className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white font-mono"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">奖励类型</label>
-                <select
-                  value={newCode.reward_type}
-                  onChange={(e) => handleRewardTypeChange(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
-                >
-                  {REWARD_TYPES.map(type => (
-                    <option key={type.value} value={type.value}>{type.label}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* 奖励配置 */}
-            <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">奖励配置</label>
-              {newCode.reward_type === 'points' && (
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={newCode.reward_value.amount || ''}
-                    onChange={(e) => updateRewardValue('points', 'amount', e.target.value)}
-                    placeholder="积分数量"
-                    min="1"
-                    className="w-32 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
-                  />
-                  <span className="text-slate-500">积分</span>
-                </div>
-              )}
-              {newCode.reward_type === 'item' && (
-                <div className="flex items-center gap-4">
-                  <select
-                    value={newCode.reward_value.item_type || 'cheer'}
-                    onChange={(e) => updateRewardValue('item', 'item_type', e.target.value)}
-                    className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
-                  >
-                    {ITEM_TYPES.map(item => (
-                      <option key={item.value} value={item.value}>{item.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    value={newCode.reward_value.amount || ''}
-                    onChange={(e) => updateRewardValue('item', 'amount', e.target.value)}
-                    placeholder="数量"
-                    min="1"
-                    className="w-24 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
-                  />
-                  <span className="text-slate-500">个</span>
-                </div>
-              )}
-              {newCode.reward_type === 'badge' && (
-                <div className="grid grid-cols-2 gap-4">
-                  <input
-                    type="text"
-                    value={newCode.reward_value.badge_key || ''}
-                    onChange={(e) => updateRewardValue('badge', 'badge_key', e.target.value)}
-                    placeholder="徽章标识"
-                    className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
-                  />
-                  <input
-                    type="text"
-                    value={newCode.reward_value.badge_name || ''}
-                    onChange={(e) => updateRewardValue('badge', 'badge_name', e.target.value)}
-                    placeholder="徽章名称"
-                    className="px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
-                  />
-                </div>
-              )}
-              {newCode.reward_type === 'api_key' && (
-                <p className="text-sm text-slate-500">API Key 将从库存中自动分配</p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">描述（管理员可见）</label>
-                <input
-                  type="text"
-                  value={newCode.description}
-                  onChange={(e) => setNewCode(prev => ({ ...prev, description: e.target.value }))}
-                  placeholder="内部备注"
-                  className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">兑换成功提示</label>
-                <input
-                  type="text"
-                  value={newCode.hint}
-                  onChange={(e) => setNewCode(prev => ({ ...prev, hint: e.target.value }))}
-                  placeholder="兑换成功后显示给用户"
-                  className="w-full px-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-800 dark:text-white"
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setShowCreateForm(false)}
-                className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors"
-              >
-                取消
-              </button>
-              <button
-                type="submit"
-                disabled={creating || !newCode.code.trim()}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all disabled:opacity-50"
-              >
-                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {creating ? '创建中...' : '创建'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* 彩蛋码列表 */}
-      <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
-        <h3 className="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-          <Gift className="w-5 h-5 text-pink-500" />
-          彩蛋码列表
-        </h3>
-
-        {codes.length === 0 ? (
-          <div className="text-center py-12 text-slate-500">暂无彩蛋码</div>
-        ) : (
-          <div className="space-y-3">
-            {codes.map((code) => {
-              const typeInfo = REWARD_TYPES.find(t => t.value === code.reward_type) || {}
-              const TypeIcon = typeInfo.icon || Gift
-              return (
-                <div
-                  key={code.id}
-                  className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl hover:border-purple-300 dark:hover:border-purple-600 border border-transparent transition-colors"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className={`p-2.5 rounded-xl bg-white dark:bg-slate-700 ${typeInfo.color || 'text-slate-500'}`}>
-                      <TypeIcon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <code className="font-mono font-semibold text-slate-800 dark:text-white">{code.code}</code>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusStyle(code.status)}`}>
-                          {getStatusText(code.status)}
-                        </span>
-                      </div>
-                      <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                        {formatReward(code.reward_type, code.reward_value)}
-                        {code.description && <span className="ml-2">· {code.description}</span>}
-                      </div>
-                      {code.status === 'claimed' && code.claimer_username && (
-                        <div className="text-xs text-blue-500 mt-1">已被 {code.claimer_username} 领取</div>
-                      )}
-                    </div>
-                  </div>
-                  {code.status === 'active' && (
-                    <button
-                      onClick={() => handleDisable(code.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                      title="禁用"
-                    >
-                      <Ban className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // 用户积分调整面板
 function UserPointsPanel() {
   const toast = useToast()
@@ -1754,10 +1370,11 @@ function UserPointsPanel() {
     if (!searchKeyword.trim()) return
     setLoading(true)
     try {
-      const data = await adminApi2.getUsers({ keyword: searchKeyword, limit: 20 })
-      setUsers(data.items || data)
+      const data = await adminApi2.getUsers({ search: searchKeyword, limit: 20 })
+      setUsers(data.items || [])
     } catch (error) {
-      toast.error('搜索失败')
+      console.error('搜索用户失败:', error)
+      toast.error('搜索失败：' + (error.response?.data?.detail || error.message))
     } finally {
       setLoading(false)
     }
@@ -1824,7 +1441,7 @@ function UserPointsPanel() {
                   />
                   <div>
                     <p className="font-medium text-slate-800 dark:text-white">{user.display_name || user.username}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">@{user.username} | 积分: {user.points_balance || 0}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">@{user.username} | 积分: {user.balance ?? user.points_balance ?? 0}</p>
                   </div>
                 </div>
 
@@ -2216,10 +1833,12 @@ function ScratchManagePanel() {
 
             {/* 奖品列表 */}
             <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">奖品池</p>
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">奖品池（点击编辑按钮修改权重控制概率）</p>
               {config.prizes?.map((prize) => {
                 const typeInfo = PRIZE_TYPE_MAP[prize.prize_type] || PRIZE_TYPE_MAP.EMPTY
                 const TypeIcon = typeInfo.icon
+                const totalWeight = config.prizes?.reduce((sum, p) => sum + (p.weight || 0), 0) || 1
+                const probability = ((prize.weight / totalWeight) * 100).toFixed(1)
                 return (
                   <div key={prize.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
                     <div className="flex items-center gap-3">
@@ -2231,17 +1850,53 @@ function ScratchManagePanel() {
                       <div>
                         <p className="font-medium text-slate-800 dark:text-white">{prize.prize_name || prize.name}</p>
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {typeInfo.name} | 权重: {prize.weight} | 库存: {prize.stock ?? '无限'}
+                          {typeInfo.name} | 权重: {prize.weight} | 概率: {probability}% | 库存: {prize.stock ?? '无限'}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleDeletePrize(prize.id)}
-                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {editingPrize === prize.id ? (
+                        <>
+                          <input
+                            type="number"
+                            defaultValue={prize.weight}
+                            min="1"
+                            className="w-20 px-2 py-1 text-sm rounded bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-800 dark:text-white"
+                            id={`scratch-weight-${prize.id}`}
+                          />
+                          <button
+                            onClick={() => handleUpdatePrize(prize.id, { weight: parseInt(document.getElementById(`scratch-weight-${prize.id}`).value) || 1 })}
+                            className="p-1.5 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
+                            title="保存"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditingPrize(null)}
+                            className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+                            title="取消"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            onClick={() => setEditingPrize(prize.id)}
+                            className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg"
+                            title="编辑权重"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeletePrize(prize.id)}
+                            className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                            title="删除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 )
@@ -2254,517 +1909,426 @@ function ScratchManagePanel() {
   )
 }
 
-// 老虎机管理面板
+// 老虎机管理面板 - 真正的符号和权重配置
 function SlotMachineManagePanel() {
   const toast = useToast()
-  const [configs, setConfigs] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [showCreateConfig, setShowCreateConfig] = useState(false)
-  const [newConfig, setNewConfig] = useState({
-    name: '老虎机游戏',
-    cost_points: 20,
-    daily_limit: 20,
-  })
-  const [newPrize, setNewPrize] = useState({
-    prize_name: '',
-    prize_type: 'POINTS',
-    prize_value: '',
-    weight: 100,
-    stock: null,
-    is_rare: false,
-  })
+  const [saving, setSaving] = useState(false)
+  const [config, setConfig] = useState(null)
+  const [symbols, setSymbols] = useState([])
+  const [metrics, setMetrics] = useState(null)
+  const [stats, setStats] = useState(null)
 
-  useEffect(() => {
-    loadConfigs()
-  }, [])
-
-  const loadConfigs = async () => {
+  // 加载配置
+  const loadConfig = useCallback(async () => {
+    setLoading(true)
     try {
-      const data = await adminApi2.getLotteryConfigs()
-      // 筛选老虎机配置
-      const slotConfigs = (data.items || data || []).filter(
-        c => c.name?.includes('老虎机') || c.name?.includes('水果机')
-      )
-      setConfigs(slotConfigs)
-    } catch (error) {
-      console.error('加载老虎机配置失败:', error)
-      toast.error('加载配置失败')
+      const data = await adminApi2.getSlotMachineConfig()
+      setConfig(data.config || null)
+      setSymbols(data.symbols || [])
+      setMetrics(data.metrics || null)
+    } catch (e) {
+      console.error('加载老虎机配置失败:', e)
+      toast.error(e?.response?.data?.detail || '加载配置失败')
     } finally {
       setLoading(false)
     }
+  }, [toast])
+
+  // 加载统计
+  const loadStats = useCallback(async () => {
+    try {
+      const data = await adminApi2.getSlotMachineStats(7)
+      setStats(data)
+    } catch (e) {
+      console.error('加载统计失败:', e)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadConfig()
+    loadStats()
+  }, [loadConfig, loadStats])
+
+  // 添加符号
+  const addSymbol = () => {
+    setSymbols((prev) => [
+      ...prev,
+      {
+        symbol_key: `symbol_${Date.now()}`,
+        emoji: '🎰',
+        name: '新符号',
+        multiplier: 1,
+        weight: 5,
+        sort_order: (prev[prev.length - 1]?.sort_order || 0) + 10,
+        is_enabled: true,
+        is_jackpot: false,
+      },
+    ])
   }
 
-  const handleCreateConfig = async () => {
-    if (!newConfig.name) {
-      toast.error('请填写配置名称')
+  // 删除符号
+  const removeSymbol = (idx) => {
+    setSymbols((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  // 更新符号
+  const updateSymbol = (idx, patch) => {
+    setSymbols((prev) => prev.map((s, i) => (i === idx ? { ...s, ...patch } : s)))
+  }
+
+  // 保存配置
+  const handleSave = async () => {
+    if (!config || symbols.length === 0) {
+      toast.error('请至少配置一个符号')
       return
     }
+    setSaving(true)
     try {
-      await adminApi2.createLotteryConfig(newConfig)
-      toast.success('创建成功')
-      setShowCreateConfig(false)
-      setNewConfig({ name: '老虎机游戏', cost_points: 20, daily_limit: 20 })
-      loadConfigs()
-    } catch (error) {
-      toast.error('创建失败：' + (error.response?.data?.detail || error.message))
-    }
-  }
-
-  const handleUpdateConfig = async (id, updates) => {
-    try {
-      await adminApi2.updateLotteryConfig(id, updates)
-      toast.success('更新成功')
-      loadConfigs()
-    } catch (error) {
-      toast.error('更新失败：' + (error.response?.data?.detail || error.message))
-    }
-  }
-
-  const handleAddPrize = async (configId) => {
-    if (!newPrize.prize_name) {
-      toast.error('请填写奖品名称')
-      return
-    }
-    try {
-      await adminApi2.createPrize({
-        config_id: configId,
-        ...newPrize,
-        stock: newPrize.stock || null,
+      // 保存基础配置
+      await adminApi2.updateSlotMachineConfig({
+        name: config.name,
+        is_active: config.is_active,
+        cost_points: Number(config.cost_points) || 30,
+        reels: Number(config.reels) || 3,
+        two_kind_multiplier: Number(config.two_kind_multiplier) || 1.5,
+        jackpot_symbol_key: config.jackpot_symbol_key,
       })
-      toast.success('奖品添加成功')
-      setNewPrize({
-        prize_name: '',
-        prize_type: 'POINTS',
-        prize_value: '',
-        weight: 100,
-        stock: null,
-        is_rare: false,
+      // 保存符号配置
+      await adminApi2.replaceSlotMachineSymbols({
+        symbols: symbols.map((s) => ({
+          ...s,
+          multiplier: Number(s.multiplier) || 1,
+          weight: Number(s.weight) || 1,
+          sort_order: Number(s.sort_order) || 0,
+        })),
       })
-      setShowCreateForm(false)
-      loadConfigs()
-    } catch (error) {
-      toast.error('添加失败：' + (error.response?.data?.detail || error.message))
+      toast.success('配置保存成功')
+      loadConfig()
+      loadStats()
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || '保存失败')
+    } finally {
+      setSaving(false)
     }
   }
 
-  const handleDeletePrize = async (id) => {
-    if (!confirm('确定删除这个奖品？')) return
-    try {
-      await adminApi2.deletePrize(id)
-      toast.success('删除成功')
-      loadConfigs()
-    } catch (error) {
-      toast.error('删除失败')
-    }
-  }
-
-  const PRIZE_TYPE_MAP = {
-    POINTS: { name: '积分', icon: Coins, color: 'yellow' },
-    ITEM: { name: '道具', icon: Package, color: 'blue' },
-    API_KEY: { name: 'API Key', icon: Key, color: 'green' },
-    EMPTY: { name: '谢谢参与', icon: X, color: 'gray' },
-  }
-
-  // 老虎机符号列表
-  const SLOT_SYMBOLS = [
-    { icon: Cherry, name: '樱桃', color: 'text-red-500' },
-    { icon: Star, name: '星星', color: 'text-yellow-500' },
-    { icon: Crown, name: '皇冠', color: 'text-purple-500' },
-    { icon: Dice5, name: '骰子', color: 'text-blue-500' },
-    { icon: Coins, name: '金币', color: 'text-amber-500' },
-  ]
+  // 计算总权重和概率
+  const totalWeight = useMemo(() => {
+    return symbols.filter(s => s.is_enabled && s.weight > 0).reduce((sum, s) => sum + Number(s.weight || 0), 0)
+  }, [symbols])
 
   if (loading) {
     return <div className="flex items-center justify-center py-20"><RefreshCw className="w-8 h-8 animate-spin text-green-500" /></div>
   }
 
+  if (!config) {
+    return (
+      <div className="text-center py-12">
+        <Dice1 className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+        <p className="text-slate-500 dark:text-slate-400 mb-4">老虎机配置不存在</p>
+        <p className="text-sm text-slate-400">请先执行数据库迁移脚本 019_slot_machine_config.sql</p>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* 页面说明 */}
+      {/* 页面说明和统计 */}
       <div className="bg-gradient-to-r from-green-500/10 to-emerald-500/10 rounded-2xl p-6 border border-green-200/50 dark:border-green-500/20">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600">
-            <Dice1 className="w-6 h-6 text-white" />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600">
+              <Dice1 className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-800 dark:text-white">老虎机管理</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400">配置符号、倍率和权重来控制胜率</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => { loadConfig(); loadStats(); }}
+              className="px-4 py-2 text-sm rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              刷新
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-2 text-sm rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 text-white flex items-center gap-2 disabled:opacity-50"
+            >
+              <Save className={`w-4 h-4 ${saving ? 'animate-spin' : ''}`} />
+              保存配置
+            </button>
+          </div>
+        </div>
+
+        {/* 统计卡片 */}
+        {stats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+            <div className="p-3 bg-white/80 dark:bg-slate-800/50 rounded-xl">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">7日抽奖次数</p>
+              <p className="text-lg font-bold text-slate-800 dark:text-white">{stats.total_draws}</p>
+            </div>
+            <div className="p-3 bg-white/80 dark:bg-slate-800/50 rounded-xl">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">实际返奖率</p>
+              <p className={`text-lg font-bold ${stats.actual_rtp > 100 ? 'text-red-500' : 'text-green-500'}`}>
+                {stats.actual_rtp}%
+              </p>
+            </div>
+            <div className="p-3 bg-white/80 dark:bg-slate-800/50 rounded-xl">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">中奖率</p>
+              <p className="text-lg font-bold text-blue-500">{stats.win_rate}%</p>
+            </div>
+            <div className="p-3 bg-white/80 dark:bg-slate-800/50 rounded-xl">
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">平台收益</p>
+              <p className={`text-lg font-bold ${stats.house_profit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {stats.house_profit >= 0 ? '+' : ''}{stats.house_profit}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 基础配置 */}
+      <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
+        <h4 className="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+          <Settings className="w-5 h-5 text-green-500" />
+          基础配置
+        </h4>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">名称</label>
+            <input
+              type="text"
+              value={config.name || ''}
+              onChange={(e) => setConfig((p) => ({ ...p, name: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+            />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-800 dark:text-white">老虎机管理</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">管理老虎机/水果机奖品和概率配置</p>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">消耗积分</label>
+            <input
+              type="number"
+              value={config.cost_points}
+              onChange={(e) => setConfig((p) => ({ ...p, cost_points: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">两连倍数</label>
+            <input
+              type="number"
+              step="0.1"
+              value={config.two_kind_multiplier}
+              onChange={(e) => setConfig((p) => ({ ...p, two_kind_multiplier: e.target.value }))}
+              className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
+            />
+          </div>
+          <div className="flex items-end gap-4">
+            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={!!config.is_active}
+                onChange={(e) => setConfig((p) => ({ ...p, is_active: e.target.checked }))}
+                className="w-4 h-4 rounded text-green-500"
+              />
+              启用老虎机
+            </label>
           </div>
         </div>
-        {/* 老虎机符号展示 */}
-        <div className="flex items-center gap-4 mt-4">
-          <span className="text-sm text-slate-500 dark:text-slate-400">游戏符号：</span>
-          <div className="flex items-center gap-2">
-            {SLOT_SYMBOLS.map((symbol, i) => (
-              <div key={i} className={`p-2 bg-white dark:bg-slate-800 rounded-lg ${symbol.color}`}>
-                <symbol.icon className="w-5 h-5" />
-              </div>
-            ))}
+        {metrics && (
+          <div className="mt-4 flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+            <span>总权重：{metrics.total_weight}</span>
+            <span>启用符号：{metrics.enabled_count}</span>
+            <span>理论返奖率：<span className={metrics.theoretical_rtp > 100 ? 'text-red-500' : 'text-green-500'}>{metrics.theoretical_rtp}%</span></span>
           </div>
-        </div>
+        )}
       </div>
 
-      {/* 创建配置按钮 */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowCreateConfig(!showCreateConfig)}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:shadow-lg transition-all text-sm font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          创建老虎机配置
-        </button>
-      </div>
-
-      {/* 创建配置表单 */}
-      {showCreateConfig && (
-        <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-green-200 dark:border-green-800/30 p-6">
-          <h4 className="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-            <Dice1 className="w-5 h-5 text-green-500" />
-            创建老虎机配置
+      {/* 符号配置 */}
+      <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <Star className="w-5 h-5 text-yellow-500" />
+            符号配置
+            <span className="text-sm font-normal text-slate-400">（权重越大，出现概率越高）</span>
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">配置名称 *</label>
-              <input
-                type="text"
-                value={newConfig.name}
-                onChange={(e) => setNewConfig({ ...newConfig, name: e.target.value })}
-                placeholder="如：老虎机游戏、水果机"
-                className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-              />
-              <p className="text-xs text-slate-400 mt-1">名称需包含"老虎机"或"水果机"</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">消耗积分</label>
-              <input
-                type="number"
-                value={newConfig.cost_points}
-                onChange={(e) => setNewConfig({ ...newConfig, cost_points: parseInt(e.target.value) || 20 })}
-                className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">每日限制</label>
-              <input
-                type="number"
-                value={newConfig.daily_limit || ''}
-                onChange={(e) => setNewConfig({ ...newConfig, daily_limit: e.target.value ? parseInt(e.target.value) : null })}
-                placeholder="空为无限制"
-                className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <button
-              onClick={() => setShowCreateConfig(false)}
-              className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleCreateConfig}
-              className="px-4 py-2 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600"
-            >
-              创建配置
-            </button>
-          </div>
+          <button
+            onClick={addSymbol}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:shadow-lg transition-all text-sm font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            添加符号
+          </button>
         </div>
-      )}
 
-      {configs.length === 0 && !showCreateConfig ? (
-        <div className="text-center py-12 text-slate-400">
-          <Dice1 className="w-16 h-16 mx-auto mb-4 opacity-50" />
-          <p>暂无老虎机配置</p>
-          <p className="text-sm mt-2">点击上方按钮创建老虎机配置</p>
-        </div>
-      ) : (
-        configs.map((config) => (
-          <div key={config.id} className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                <Dice1 className="w-5 h-5 text-green-500" />
-                {config.name}
-              </h3>
-              <div className="flex items-center gap-2">
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  config.is_active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  {config.is_active ? '已启用' : '已禁用'}
-                </span>
-                <button
-                  onClick={() => handleUpdateConfig(config.id, { is_active: !config.is_active })}
-                  className="px-3 py-1 text-sm text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg"
-                >
-                  {config.is_active ? '禁用' : '启用'}
-                </button>
-              </div>
-            </div>
-
-            {/* 基础配置 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">消耗积分</p>
-                <p className="text-lg font-bold text-green-600 dark:text-green-400">{config.cost_points}</p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">每日限制</p>
-                <p className="text-lg font-bold text-slate-800 dark:text-white">{config.daily_limit || '无限制'}</p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">总游玩次数</p>
-                <p className="text-lg font-bold text-slate-800 dark:text-white">{config.total_draws || 0}</p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">奖品种类</p>
-                <p className="text-lg font-bold text-slate-800 dark:text-white">{config.prizes?.length || 0}</p>
-              </div>
-            </div>
-
-            {/* 添加奖品按钮 */}
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={() => setShowCreateForm(showCreateForm === config.id ? false : config.id)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 text-white rounded-xl hover:shadow-lg transition-all text-sm font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                添加奖品
-              </button>
-            </div>
-
-            {/* 创建奖品表单 */}
-            {showCreateForm === config.id && (
-              <div className="mb-4 p-4 bg-green-50 dark:bg-green-900/10 rounded-xl border border-green-200 dark:border-green-800/30">
-                <h4 className="font-medium text-slate-800 dark:text-white mb-3">添加新奖品</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <input
-                    type="text"
-                    placeholder="奖品名称 *"
-                    value={newPrize.prize_name}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_name: e.target.value })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  />
-                  <select
-                    value={newPrize.prize_type}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_type: e.target.value })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  >
-                    <option value="POINTS">积分</option>
-                    <option value="ITEM">道具</option>
-                    <option value="API_KEY">API Key</option>
-                    <option value="EMPTY">谢谢参与</option>
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="奖品值（积分数/道具名）"
-                    value={newPrize.prize_value}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_value: e.target.value })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  />
-                  <input
-                    type="number"
-                    placeholder="权重"
-                    value={newPrize.weight}
-                    onChange={(e) => setNewPrize({ ...newPrize, weight: parseInt(e.target.value) || 100 })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  />
-                  <input
-                    type="number"
-                    placeholder="库存（空=无限）"
-                    value={newPrize.stock || ''}
-                    onChange={(e) => setNewPrize({ ...newPrize, stock: e.target.value ? parseInt(e.target.value) : null })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  />
-                  <label className="flex items-center gap-2 px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={newPrize.is_rare}
-                      onChange={(e) => setNewPrize({ ...newPrize, is_rare: e.target.checked })}
-                      className="w-4 h-4 rounded text-green-500"
-                    />
-                    <span className="text-sm text-slate-600 dark:text-slate-300">稀有奖品</span>
-                  </label>
-                </div>
-                <div className="flex justify-end gap-2 mt-3">
-                  <button
-                    onClick={() => setShowCreateForm(false)}
-                    className="px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={() => handleAddPrize(config.id)}
-                    className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600"
-                  >
-                    添加
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* 奖品列表 */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">奖品池</p>
-              {config.prizes?.map((prize) => {
-                const typeInfo = PRIZE_TYPE_MAP[prize.prize_type] || PRIZE_TYPE_MAP.EMPTY
-                const TypeIcon = typeInfo.icon
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm">
+            <thead className="text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-700">
+              <tr>
+                <th className="text-left py-3 px-2">符号</th>
+                <th className="text-left py-3 px-2">Key</th>
+                <th className="text-left py-3 px-2">名称</th>
+                <th className="text-left py-3 px-2">三连倍率</th>
+                <th className="text-left py-3 px-2">权重</th>
+                <th className="text-left py-3 px-2">概率</th>
+                <th className="text-left py-3 px-2">启用</th>
+                <th className="text-left py-3 px-2">大奖</th>
+                <th className="text-right py-3 px-2">操作</th>
+              </tr>
+            </thead>
+            <tbody className="text-slate-800 dark:text-white">
+              {symbols.map((s, idx) => {
+                const prob = totalWeight > 0 && s.is_enabled && s.weight > 0
+                  ? ((s.weight / totalWeight) * 100).toFixed(2)
+                  : '0.00'
                 return (
-                  <div key={prize.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        prize.is_rare ? 'bg-gradient-to-br from-yellow-400 to-orange-500' : 'bg-slate-200 dark:bg-slate-700'
-                      }`}>
-                        {prize.is_rare ? <Star className="w-5 h-5 text-white" /> : <TypeIcon className="w-5 h-5 text-slate-500" />}
-                      </div>
-                      <div>
-                        <p className="font-medium text-slate-800 dark:text-white">{prize.prize_name || prize.name}</p>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {typeInfo.name} | 权重: {prize.weight} | 库存: {prize.stock ?? '无限'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
+                  <tr key={`${s.symbol_key}-${idx}`} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="py-3 px-2">
+                      <input
+                        className="w-16 px-2 py-1.5 text-2xl text-center rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                        value={s.emoji}
+                        onChange={(e) => updateSymbol(idx, { emoji: e.target.value })}
+                      />
+                    </td>
+                    <td className="py-3 px-2">
+                      <input
+                        className="w-24 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-xs"
+                        value={s.symbol_key}
+                        onChange={(e) => updateSymbol(idx, { symbol_key: e.target.value })}
+                      />
+                    </td>
+                    <td className="py-3 px-2">
+                      <input
+                        className="w-20 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                        value={s.name}
+                        onChange={(e) => updateSymbol(idx, { name: e.target.value })}
+                      />
+                    </td>
+                    <td className="py-3 px-2">
+                      <input
+                        type="number"
+                        className="w-20 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                        value={s.multiplier}
+                        onChange={(e) => updateSymbol(idx, { multiplier: e.target.value })}
+                      />
+                    </td>
+                    <td className="py-3 px-2">
+                      <input
+                        type="number"
+                        className="w-20 px-2 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                        value={s.weight}
+                        onChange={(e) => updateSymbol(idx, { weight: e.target.value })}
+                      />
+                    </td>
+                    <td className="py-3 px-2">
+                      <span className={`font-mono ${s.is_enabled ? 'text-green-500' : 'text-slate-400'}`}>
+                        {prob}%
+                      </span>
+                    </td>
+                    <td className="py-3 px-2">
+                      <input
+                        type="checkbox"
+                        checked={!!s.is_enabled}
+                        onChange={(e) => updateSymbol(idx, { is_enabled: e.target.checked })}
+                        className="w-4 h-4 rounded text-green-500"
+                      />
+                    </td>
+                    <td className="py-3 px-2">
+                      <input
+                        type="checkbox"
+                        checked={!!s.is_jackpot}
+                        onChange={(e) => updateSymbol(idx, { is_jackpot: e.target.checked })}
+                        className="w-4 h-4 rounded text-yellow-500"
+                      />
+                    </td>
+                    <td className="py-3 px-2 text-right">
                       <button
-                        onClick={() => handleDeletePrize(prize.id)}
+                        onClick={() => removeSymbol(idx)}
                         className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                    </div>
-                  </div>
+                    </td>
+                  </tr>
                 )
               })}
-            </div>
+            </tbody>
+          </table>
+        </div>
+
+        {symbols.length === 0 && (
+          <div className="text-center py-8 text-slate-400">
+            <Star className="w-12 h-12 mx-auto mb-2 opacity-50" />
+            <p>暂无符号配置，请添加符号</p>
           </div>
-        ))
-      )}
+        )}
+      </div>
+
+      {/* 当前符号预览 */}
+      <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
+        <h4 className="font-semibold text-slate-800 dark:text-white mb-4">符号预览</h4>
+        <div className="flex flex-wrap gap-3">
+          {symbols.filter(s => s.is_enabled).map((s, i) => (
+            <div key={i} className={`p-3 rounded-xl border ${s.is_jackpot ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20' : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800'}`}>
+              <div className="text-3xl text-center mb-1">{s.emoji}</div>
+              <div className="text-xs text-center text-slate-600 dark:text-slate-300">{s.name}</div>
+              <div className="text-xs text-center font-bold text-green-500">{s.multiplier}x</div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
-// 扭蛋机管理面板
+// 扭蛋机管理面板 - 显示奖池配置（只读）
 function GachaManagePanel() {
-  const toast = useToast()
-  const [configs, setConfigs] = useState([])
+  const [status, setStatus] = useState(null)
+  const [prizes, setPrizes] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showCreateForm, setShowCreateForm] = useState(false)
-  const [showCreateConfig, setShowCreateConfig] = useState(false)
-  const [newConfig, setNewConfig] = useState({
-    name: '扭蛋机抽卡',
-    cost_points: 50,
-    daily_limit: 10,
-  })
-  const [newPrize, setNewPrize] = useState({
-    prize_name: '',
-    prize_type: 'POINTS',
-    prize_value: '',
-    weight: 100,
-    stock: null,
-    is_rare: false,
-  })
+
+  // 扭蛋机配置（与后端一致）
+  const GACHA_COST = 50
 
   useEffect(() => {
-    loadConfigs()
+    loadData()
   }, [])
 
-  const loadConfigs = async () => {
+  const loadData = async () => {
+    setLoading(true)
     try {
-      const data = await adminApi2.getLotteryConfigs()
-      // 筛选扭蛋机配置
-      const gachaConfigs = (data.items || data || []).filter(
-        c => c.name?.includes('扭蛋') || c.name?.includes('盲盒')
-      )
-      setConfigs(gachaConfigs)
+      const [statusRes, prizesRes] = await Promise.all([
+        api.get('/gacha/status'),
+        api.get('/gacha/prizes')
+      ])
+      setStatus(statusRes)
+      setPrizes(prizesRes.prizes || [])
     } catch (error) {
-      console.error('加载扭蛋机配置失败:', error)
-      toast.error('加载配置失败')
+      console.error('加载扭蛋机数据失败:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleCreateConfig = async () => {
-    if (!newConfig.name) {
-      toast.error('请填写配置名称')
-      return
-    }
-    try {
-      await adminApi2.createLotteryConfig(newConfig)
-      toast.success('创建成功')
-      setShowCreateConfig(false)
-      setNewConfig({ name: '扭蛋机抽卡', cost_points: 50, daily_limit: 10 })
-      loadConfigs()
-    } catch (error) {
-      toast.error('创建失败：' + (error.response?.data?.detail || error.message))
-    }
+  // 获取奖品图标
+  const getPrizeIcon = (type) => {
+    return type === 'points' ? Coins : Package
   }
-
-  const handleUpdateConfig = async (id, updates) => {
-    try {
-      await adminApi2.updateLotteryConfig(id, updates)
-      toast.success('更新成功')
-      loadConfigs()
-    } catch (error) {
-      toast.error('更新失败：' + (error.response?.data?.detail || error.message))
-    }
-  }
-
-  const handleAddPrize = async (configId) => {
-    if (!newPrize.prize_name) {
-      toast.error('请填写奖品名称')
-      return
-    }
-    try {
-      await adminApi2.createPrize({
-        config_id: configId,
-        ...newPrize,
-        stock: newPrize.stock || null,
-      })
-      toast.success('奖品添加成功')
-      setNewPrize({
-        prize_name: '',
-        prize_type: 'POINTS',
-        prize_value: '',
-        weight: 100,
-        stock: null,
-        is_rare: false,
-      })
-      setShowCreateForm(false)
-      loadConfigs()
-    } catch (error) {
-      toast.error('添加失败：' + (error.response?.data?.detail || error.message))
-    }
-  }
-
-  const handleDeletePrize = async (id) => {
-    if (!confirm('确定删除这个奖品？')) return
-    try {
-      await adminApi2.deletePrize(id)
-      toast.success('删除成功')
-      loadConfigs()
-    } catch (error) {
-      toast.error('删除失败')
-    }
-  }
-
-  const PRIZE_TYPE_MAP = {
-    POINTS: { name: '积分', icon: Coins, color: 'yellow' },
-    ITEM: { name: '道具', icon: Package, color: 'blue' },
-    API_KEY: { name: 'API Key', icon: Key, color: 'green' },
-    EMPTY: { name: '谢谢参与', icon: X, color: 'gray' },
-  }
-
-  // 扭蛋稀有度配色
-  const RARITY_COLORS = [
-    { name: 'N (普通)', color: 'bg-gray-400' },
-    { name: 'R (稀有)', color: 'bg-blue-500' },
-    { name: 'SR (超稀有)', color: 'bg-purple-500' },
-    { name: 'SSR (极稀有)', color: 'bg-gradient-to-r from-yellow-400 to-orange-500' },
-  ]
 
   if (loading) {
-    return <div className="flex items-center justify-center py-20"><RefreshCw className="w-8 h-8 animate-spin text-purple-500" /></div>
+    return (
+      <div className="flex items-center justify-center py-20">
+        <RefreshCw className="w-8 h-8 animate-spin text-purple-500" />
+      </div>
+    )
   }
+
+  // 计算总权重
+  const totalWeight = status?.total_weight || prizes.reduce((sum, p) => sum + (p.weight || 0), 0)
 
   return (
     <div className="space-y-6">
@@ -2775,262 +2339,113 @@ function GachaManagePanel() {
             <CircleDot className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h3 className="font-semibold text-slate-800 dark:text-white">扭蛋机/盲盒管理</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400">管理扭蛋机奖品和稀有度配置</p>
+            <h3 className="font-semibold text-slate-800 dark:text-white">扭蛋机配置</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              扭蛋机奖池配置为固定配置，用户每次扭蛋直接获得积分或道具奖励
+            </p>
           </div>
         </div>
-        {/* 稀有度展示 */}
-        <div className="flex items-center gap-4 mt-4 flex-wrap">
-          <span className="text-sm text-slate-500 dark:text-slate-400">稀有度：</span>
-          <div className="flex items-center gap-2 flex-wrap">
-            {RARITY_COLORS.map((rarity, i) => (
-              <div key={i} className="flex items-center gap-1.5">
-                <div className={`w-3 h-3 rounded-full ${rarity.color}`} />
-                <span className="text-sm text-slate-600 dark:text-slate-300">{rarity.name}</span>
-              </div>
-            ))}
+        <div className="flex items-center gap-4 mt-4 p-3 bg-white/50 dark:bg-slate-800/50 rounded-xl">
+          <div className="flex items-center gap-2">
+            <Coins className="w-4 h-4 text-yellow-500" />
+            <span className="text-sm text-slate-600 dark:text-slate-300">
+              单次消耗: <span className="font-bold text-purple-600">{GACHA_COST}</span> 积分
+            </span>
+          </div>
+          <div className="text-slate-300 dark:text-slate-600">|</div>
+          <div className="text-sm text-slate-500 dark:text-slate-400">
+            奖励直接发放到账户，无需兑换码
           </div>
         </div>
       </div>
 
-      {/* 创建配置按钮 */}
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowCreateConfig(!showCreateConfig)}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all text-sm font-medium"
-        >
-          <Plus className="w-4 h-4" />
-          创建扭蛋机配置
-        </button>
-      </div>
-
-      {/* 创建配置表单 */}
-      {showCreateConfig && (
-        <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-purple-200 dark:border-purple-800/30 p-6">
-          <h4 className="font-semibold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
-            <CircleDot className="w-5 h-5 text-purple-500" />
-            创建扭蛋机配置
+      {/* 奖池配置 */}
+      <div className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-semibold text-slate-800 dark:text-white flex items-center gap-2">
+            <Gift className="w-5 h-5 text-pink-500" />
+            奖池配置
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">配置名称 *</label>
-              <input
-                type="text"
-                value={newConfig.name}
-                onChange={(e) => setNewConfig({ ...newConfig, name: e.target.value })}
-                placeholder="如：扭蛋机抽卡、盲盒活动"
-                className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-              />
-              <p className="text-xs text-slate-400 mt-1">名称需包含"扭蛋"或"盲盒"</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">消耗积分</label>
-              <input
-                type="number"
-                value={newConfig.cost_points}
-                onChange={(e) => setNewConfig({ ...newConfig, cost_points: parseInt(e.target.value) || 50 })}
-                className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">每日限制</label>
-              <input
-                type="number"
-                value={newConfig.daily_limit || ''}
-                onChange={(e) => setNewConfig({ ...newConfig, daily_limit: e.target.value ? parseInt(e.target.value) : null })}
-                placeholder="空为无限制"
-                className="w-full px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <button
-              onClick={() => setShowCreateConfig(false)}
-              className="px-4 py-2 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-            >
-              取消
-            </button>
-            <button
-              onClick={handleCreateConfig}
-              className="px-4 py-2 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600"
-            >
-              创建配置
-            </button>
-          </div>
+          <button
+            onClick={loadData}
+            className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
+          >
+            <RefreshCw className="w-4 h-4 text-slate-500" />
+          </button>
         </div>
-      )}
 
-      {configs.length === 0 && !showCreateConfig ? (
-        <div className="text-center py-12 text-slate-400">
-          <CircleDot className="w-16 h-16 mx-auto mb-4 opacity-50" />
-          <p>暂无扭蛋机配置</p>
-          <p className="text-sm mt-2">点击上方按钮创建扭蛋机配置</p>
-        </div>
-      ) : (
-        configs.map((config) => (
-          <div key={config.id} className="bg-white dark:bg-slate-900/50 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-slate-800 dark:text-white flex items-center gap-2">
-                <CircleDot className="w-5 h-5 text-purple-500" />
-                {config.name}
-              </h3>
-              <div className="flex items-center gap-2">
-                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  config.is_active ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-slate-100 text-slate-500'
-                }`}>
-                  {config.is_active ? '已启用' : '已禁用'}
-                </span>
-                <button
-                  onClick={() => handleUpdateConfig(config.id, { is_active: !config.is_active })}
-                  className="px-3 py-1 text-sm text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg"
-                >
-                  {config.is_active ? '禁用' : '启用'}
-                </button>
-              </div>
-            </div>
-
-            {/* 基础配置 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">消耗积分</p>
-                <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{config.cost_points}</p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">每日限制</p>
-                <p className="text-lg font-bold text-slate-800 dark:text-white">{config.daily_limit || '无限制'}</p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">总抽卡次数</p>
-                <p className="text-lg font-bold text-slate-800 dark:text-white">{config.total_draws || 0}</p>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">奖品种类</p>
-                <p className="text-lg font-bold text-slate-800 dark:text-white">{config.prizes?.length || 0}</p>
-              </div>
-            </div>
-
-            {/* 添加奖品按钮 */}
-            <div className="flex justify-end mb-4">
-              <button
-                onClick={() => setShowCreateForm(showCreateForm === config.id ? false : config.id)}
-                className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl hover:shadow-lg transition-all text-sm font-medium"
-              >
-                <Plus className="w-4 h-4" />
-                添加奖品
-              </button>
-            </div>
-
-            {/* 创建奖品表单 */}
-            {showCreateForm === config.id && (
-              <div className="mb-4 p-4 bg-purple-50 dark:bg-purple-900/10 rounded-xl border border-purple-200 dark:border-purple-800/30">
-                <h4 className="font-medium text-slate-800 dark:text-white mb-3">添加新奖品</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <input
-                    type="text"
-                    placeholder="奖品名称 *"
-                    value={newPrize.prize_name}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_name: e.target.value })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  />
-                  <select
-                    value={newPrize.prize_type}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_type: e.target.value })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  >
-                    <option value="POINTS">积分</option>
-                    <option value="ITEM">道具</option>
-                    <option value="API_KEY">API Key</option>
-                    <option value="EMPTY">谢谢参与</option>
-                  </select>
-                  <input
-                    type="text"
-                    placeholder="奖品值（积分数/道具名）"
-                    value={newPrize.prize_value}
-                    onChange={(e) => setNewPrize({ ...newPrize, prize_value: e.target.value })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  />
-                  <input
-                    type="number"
-                    placeholder="权重"
-                    value={newPrize.weight}
-                    onChange={(e) => setNewPrize({ ...newPrize, weight: parseInt(e.target.value) || 100 })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  />
-                  <input
-                    type="number"
-                    placeholder="库存（空=无限）"
-                    value={newPrize.stock || ''}
-                    onChange={(e) => setNewPrize({ ...newPrize, stock: e.target.value ? parseInt(e.target.value) : null })}
-                    className="px-3 py-2 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-white"
-                  />
-                  <label className="flex items-center gap-2 px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={newPrize.is_rare}
-                      onChange={(e) => setNewPrize({ ...newPrize, is_rare: e.target.checked })}
-                      className="w-4 h-4 rounded text-purple-500"
-                    />
-                    <span className="text-sm text-slate-600 dark:text-slate-300">稀有奖品 (SSR)</span>
-                  </label>
-                </div>
-                <div className="flex justify-end gap-2 mt-3">
-                  <button
-                    onClick={() => setShowCreateForm(false)}
-                    className="px-3 py-1.5 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={() => handleAddPrize(config.id)}
-                    className="px-3 py-1.5 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600"
-                  >
-                    添加
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* 奖品列表 */}
-            <div className="space-y-2">
-              <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">奖品池</p>
-              {config.prizes?.map((prize) => {
-                const typeInfo = PRIZE_TYPE_MAP[prize.prize_type] || PRIZE_TYPE_MAP.EMPTY
-                const TypeIcon = typeInfo.icon
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700">
+                <th className="text-left py-3 px-4 font-medium text-slate-500 dark:text-slate-400">奖品名称</th>
+                <th className="text-left py-3 px-4 font-medium text-slate-500 dark:text-slate-400">类型</th>
+                <th className="text-center py-3 px-4 font-medium text-slate-500 dark:text-slate-400">稀有度</th>
+                <th className="text-right py-3 px-4 font-medium text-slate-500 dark:text-slate-400">中奖概率</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prizes.map((prize, index) => {
+                const Icon = getPrizeIcon(prize.type)
+                const probability = totalWeight > 0 ? ((prize.weight || 0) / totalWeight * 100).toFixed(1) : 0
                 return (
-                  <div key={prize.id} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        prize.is_rare ? 'bg-gradient-to-br from-yellow-400 via-orange-500 to-red-500 animate-pulse' : 'bg-slate-200 dark:bg-slate-700'
+                  <tr key={index} className="border-b border-slate-100 dark:border-slate-800">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <Icon className={`w-4 h-4 ${prize.type === 'points' ? 'text-yellow-500' : 'text-blue-500'}`} />
+                        <span className="font-medium text-slate-700 dark:text-slate-200">{prize.name}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        prize.type === 'points'
+                          ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
+                          : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
                       }`}>
-                        {prize.is_rare ? <Sparkles className="w-5 h-5 text-white" /> : <TypeIcon className="w-5 h-5 text-slate-500" />}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-slate-800 dark:text-white">{prize.prize_name || prize.name}</p>
-                          {prize.is_rare && (
-                            <span className="px-1.5 py-0.5 text-xs bg-gradient-to-r from-yellow-400 to-orange-500 text-white rounded font-bold">SSR</span>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                          {typeInfo.name} | 权重: {prize.weight} | 库存: {prize.stock ?? '无限'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleDeletePrize(prize.id)}
-                        className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
+                        {prize.type === 'points' ? '积分' : '道具'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      {prize.is_rare ? (
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400">
+                          稀有
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">普通</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <span className={`font-mono ${prize.is_rare ? 'text-purple-600 font-bold' : 'text-slate-600 dark:text-slate-300'}`}>
+                        {probability}%
+                      </span>
+                    </td>
+                  </tr>
                 )
               })}
-            </div>
-          </div>
-        ))
-      )}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="text-xs text-slate-400 mt-4">
+          * 奖池配置在后端代码中定义，如需调整请修改 backend/app/api/v1/endpoints/gacha.py 中的 GACHA_PRIZES 配置
+        </p>
+      </div>
+
+      {/* 统计概览 */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="bg-white dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200/50 dark:border-slate-700/50">
+          <div className="text-sm text-slate-500 dark:text-slate-400">奖品种类</div>
+          <div className="text-2xl font-bold text-slate-800 dark:text-white mt-1">{prizes.length}</div>
+        </div>
+        <div className="bg-white dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200/50 dark:border-slate-700/50">
+          <div className="text-sm text-slate-500 dark:text-slate-400">稀有奖品</div>
+          <div className="text-2xl font-bold text-purple-600 mt-1">{prizes.filter(p => p.is_rare).length}</div>
+        </div>
+        <div className="bg-white dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200/50 dark:border-slate-700/50">
+          <div className="text-sm text-slate-500 dark:text-slate-400">单次消耗</div>
+          <div className="text-2xl font-bold text-yellow-600 mt-1">{GACHA_COST} 积分</div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -3068,7 +2483,6 @@ export default function ActivityManagePage() {
     { id: 'slot', name: '老虎机管理', icon: Dice1 },
     { id: 'gacha', name: '扭蛋机管理', icon: CircleDot },
     { id: 'exchange', name: '兑换商城', icon: ShoppingBag },
-    { id: 'easter-egg', name: '彩蛋管理', icon: Egg },
     { id: 'users', name: '用户积分', icon: Users },
   ]
 
@@ -3125,7 +2539,6 @@ export default function ActivityManagePage() {
           {activeTab === 'slot' && <SlotMachineManagePanel />}
           {activeTab === 'gacha' && <GachaManagePanel />}
           {activeTab === 'exchange' && <ExchangeManagePanel />}
-          {activeTab === 'easter-egg' && <EasterEggPanel />}
           {activeTab === 'users' && <UserPointsPanel />}
         </div>
       </div>

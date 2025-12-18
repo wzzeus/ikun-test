@@ -183,6 +183,23 @@ async def cheer_registration(
         db, current_user.id, user_stats
     )
 
+    # 确保 cheer 有 id
+    await db.flush()
+
+    # 记录任务进度（打气任务）
+    from app.services.task_service import TaskService
+    from app.models.task import TaskType
+    await TaskService.record_event(
+        db=db,
+        user_id=current_user.id,
+        task_type=TaskType.CHEER,
+        delta=1,
+        event_key=f"cheer:{cheer.id}",
+        ref_type="cheer",
+        ref_id=cheer.id,
+        auto_claim=True,
+    )
+
     await db.commit()
 
     response_message = "打气成功！"

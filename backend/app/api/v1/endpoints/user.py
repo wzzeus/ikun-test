@@ -1,7 +1,8 @@
 """
 用户相关 API
 """
-from typing import Optional
+from datetime import datetime
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, ConfigDict
@@ -17,6 +18,8 @@ router = APIRouter()
 
 # 有效角色列表
 VALID_ROLES = ["admin", "reviewer", "contestant", "spectator"]
+# 用户自选角色白名单（只能选这两个）
+SELECTABLE_ROLES = ["contestant", "spectator"]
 
 
 class UserResponse(BaseModel):
@@ -28,8 +31,10 @@ class UserResponse(BaseModel):
     email: Optional[str] = None
     display_name: Optional[str] = None
     avatar_url: Optional[str] = None
-    role: str  # admin / contestant / spectator
+    role: str  # admin / reviewer / contestant / spectator
     original_role: Optional[str] = None  # 用户的原始角色（管理员角色切换用）
+    role_selected: bool = False  # 是否已完成角色选择引导
+    role_selected_at: Optional[datetime] = None  # 角色选择时间
     is_active: bool
     linux_do_id: Optional[str] = None
     linux_do_username: Optional[str] = None
@@ -177,6 +182,62 @@ async def switch_role(
 
     # 更新用户角色
     current_user.role = request.role
+    await db.commit()
+    await db.refresh(current_user)
+
+    return UserResponse.model_validate(current_user)
+
+
+class RoleSelectRequest(BaseModel):
+    """角色选择请求（新用户引导页专用）"""
+    role: Literal["contestant", "spectator"]
+
+
+@router.post("/me/select-role", response_model=UserResponse, summary="选择用户角色（新用户引导）")
+async def select_role(
+    request: RoleSelectRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_dep),
+):
+    """
+    新用户角色选择（引导页使用）
+
+    - **role**: 目标角色，只能选择 contestant（参赛者）或 spectator（吃瓜群众）
+
+    业务规则：
+    1. admin/reviewer 用户不能使用此接口（由后台分配）
+    2. 已选择过角色的用户不能重复选择
+    3. 参赛者不能反悔改成吃瓜群众
+    """
+    # 获取用户的真实身份（优先检查 original_role，防止管理员切换角色后绕过限制）
+    real_role = current_user.original_role or current_user.role
+
+    # 管理员和评审员不能通过此接口改角色
+    if real_role in ('admin', 'reviewer'):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="管理员和评审员角色由系统分配，不能自行修改"
+        )
+
+    # 已经选过角色的用户不能重复选择（幂等：相同角色允许）
+    if current_user.role_selected and current_user.role != request.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="你已经选择过角色，不能重复修改"
+        )
+
+    # 参赛者不能反悔改成吃瓜群众
+    if current_user.role == 'contestant' and request.role == 'spectator':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="参赛者不能改为吃瓜群众，你已经踏上征途了！"
+        )
+
+    # 更新角色和选择状态
+    current_user.role = request.role
+    current_user.role_selected = True
+    current_user.role_selected_at = datetime.utcnow()
+
     await db.commit()
     await db.refresh(current_user)
 

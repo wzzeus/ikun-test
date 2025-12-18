@@ -67,7 +67,7 @@ export default function DevRoleSwitcher() {
     try {
       // 调用后端 API 切换角色
       const response = await api.post('/users/me/switch-role', { role })
-      // 更新本地用户状态
+      // 更新本地用户状态（setUser 会自动同步 original_role 到 originalRole）
       setUser(response)
     } catch (err) {
       console.error('角色切换失败:', err)

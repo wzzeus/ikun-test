@@ -93,14 +93,33 @@ class LotteryService:
         return available_prizes[-1]
 
     @staticmethod
-    async def _assign_api_key(db: AsyncSession, user_id: int) -> Optional[str]:
-        """分配一个API Key给用户"""
+    async def _assign_api_key(
+        db: AsyncSession,
+        user_id: int,
+        usage_type: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        分配一个API Key给用户
+
+        Args:
+            db: 数据库会话
+            user_id: 用户ID
+            usage_type: 用途类型，对应 api_key_codes.description（如"抽奖"、"扭蛋"等）
+                       如果为空则从任意可用的key中分配
+
+        Returns:
+            分配成功返回包含 code 和 quota 的字典，失败返回 None
+        """
+        # 构建查询条件
+        query = select(ApiKeyCode).where(ApiKeyCode.status == ApiKeyStatus.AVAILABLE)
+
+        # 如果指定了用途类型，按用途筛选
+        if usage_type:
+            query = query.where(ApiKeyCode.description == usage_type)
+
         # 原子操作：找一个可用的key并分配
         result = await db.execute(
-            select(ApiKeyCode)
-            .where(ApiKeyCode.status == ApiKeyStatus.AVAILABLE)
-            .limit(1)
-            .with_for_update()
+            query.limit(1).with_for_update()
         )
         api_key = result.scalar_one_or_none()
 
@@ -112,7 +131,11 @@ class LotteryService:
         api_key.assigned_user_id = user_id
         api_key.assigned_at = datetime.now()
 
-        return api_key.code
+        return {
+            "code": api_key.code,
+            "quota": float(api_key.quota) if api_key.quota else 0,
+            "description": api_key.description
+        }
 
     @staticmethod
     async def _add_user_item(db: AsyncSession, user_id: int, item_type: str, quantity: int = 1):
@@ -131,14 +154,19 @@ class LotteryService:
     async def draw(
         db: AsyncSession,
         user_id: int,
-        request_id: str = None
+        request_id: str = None,
+        use_ticket: bool = False
     ) -> Dict[str, Any]:
         """
         执行抽奖
         返回抽奖结果
         整个流程在一个事务内完成，保证原子性
+
+        Args:
+            use_ticket: 是否优先使用抽奖券（免费）
         """
         from sqlalchemy.exc import IntegrityError
+        from app.services.exchange_service import ExchangeService
 
         # 生成请求ID用于幂等
         request_id = request_id or str(uuid.uuid4())
@@ -164,22 +192,33 @@ class LotteryService:
         if not config:
             raise ValueError("当前没有进行中的抽奖活动")
 
-        # 检查每日次数限制
-        if config.daily_limit:
-            today_count = await LotteryService.get_today_draw_count(db, user_id, config.id)
-            if today_count >= config.daily_limit:
-                raise ValueError(f"今日抽奖次数已达上限（{config.daily_limit}次）")
-
         try:
-            # 扣除积分（不自动提交，统一在最后提交）
-            await PointsService.deduct_points(
-                db=db,
-                user_id=user_id,
-                amount=config.cost_points,
-                reason=PointsReason.LOTTERY_SPEND,
-                description=f"抽奖消费",
-                auto_commit=False
-            )
+            # 检查是否使用抽奖券（券不受日限约束）
+            used_ticket = False
+            actual_cost = config.cost_points
+
+            if use_ticket:
+                # 尝试使用抽奖券
+                used_ticket = await ExchangeService.use_ticket(db, user_id, "LOTTERY_TICKET")
+
+            if used_ticket:
+                # 使用了抽奖券：不受日限约束，不扣积分
+                actual_cost = 0
+            else:
+                # 没有券或不使用券：检查日限，扣除积分
+                if config.daily_limit:
+                    today_count = await LotteryService.get_today_draw_count(db, user_id, config.id)
+                    if today_count >= config.daily_limit:
+                        raise ValueError(f"今日抽奖次数已达上限（{config.daily_limit}次）")
+
+                await PointsService.deduct_points(
+                    db=db,
+                    user_id=user_id,
+                    amount=config.cost_points,
+                    reason=PointsReason.LOTTERY_SPEND,
+                    description=f"抽奖消费",
+                    auto_commit=False
+                )
 
             # 获取奖池并抽奖
             prizes = await LotteryService.get_prizes(db, config.id)
@@ -188,6 +227,7 @@ class LotteryService:
             # 处理奖品发放
             prize_value = prize.prize_value
             extra_message = None
+            api_key_code = None  # 完整的 API Key 兑换码
 
             if prize.prize_type == PrizeType.ITEM:
                 # 发放道具
@@ -195,11 +235,15 @@ class LotteryService:
                 extra_message = f"获得{prize.prize_name}x1"
 
             elif prize.prize_type == PrizeType.API_KEY:
-                # 发放API Key
-                api_key = await LotteryService._assign_api_key(db, user_id)
-                if api_key:
-                    prize_value = api_key[:8] + "****"  # 部分隐藏
-                    extra_message = "恭喜获得稀有奖品！请在个人中心查看"
+                # 发放API Key，按用途（prize_value）从对应库存分配
+                # prize_value 存储用途类型，对应 api_key_codes.description
+                usage_type = prize.prize_value or "抽奖"  # 默认用途为"抽奖"
+                api_key_info = await LotteryService._assign_api_key(db, user_id, usage_type)
+                if api_key_info:
+                    api_key_code = api_key_info["code"]  # 完整兑换码
+                    prize_value = api_key_info["code"][:8] + "****"  # 部分隐藏（用于显示和记录）
+                    quota_display = f"${api_key_info['quota']}" if api_key_info['quota'] else ""
+                    extra_message = f"恭喜获得{quota_display}兑换码！"
                 else:
                     # API Key库存不足，改为发放积分作为补偿
                     compensation = 100
@@ -236,7 +280,7 @@ class LotteryService:
             draw = LotteryDraw(
                 user_id=user_id,
                 config_id=config.id,
-                cost_points=config.cost_points,
+                cost_points=actual_cost,  # 使用实际消耗（使用券时为0）
                 prize_id=prize.id,
                 prize_type=prize.prize_type.value,
                 prize_name=prize.prize_name,
@@ -245,6 +289,21 @@ class LotteryService:
                 request_id=request_id
             )
             db.add(draw)
+            await db.flush()
+
+            # 记录任务进度（抽奖任务）
+            from app.services.task_service import TaskService
+            from app.models.task import TaskType
+            await TaskService.record_event(
+                db=db,
+                user_id=user_id,
+                task_type=TaskType.LOTTERY,
+                delta=1,
+                event_key=f"lottery:{draw.id}",
+                ref_type="lottery_draw",
+                ref_id=draw.id,
+                auto_claim=True,
+            )
 
             # 统一提交事务
             await db.commit()
@@ -284,8 +343,10 @@ class LotteryService:
             "prize_value": prize_value,
             "is_rare": prize.is_rare,
             "message": extra_message,
-            "cost_points": config.cost_points,
-            "balance": balance
+            "cost_points": actual_cost,  # 实际消耗的积分（使用券时为0）
+            "used_ticket": used_ticket,  # 是否使用了抽奖券
+            "balance": balance,
+            "api_key_code": api_key_code,  # 完整的 API Key 兑换码（仅 API_KEY 类型时有值）
         }
 
     @staticmethod
@@ -321,15 +382,23 @@ class LotteryService:
 
         # 如果提供了用户ID，返回用户相关信息
         if user_id:
+            from app.services.exchange_service import ExchangeService
             today_count = await LotteryService.get_today_draw_count(db, user_id, config.id)
             balance = await PointsService.get_balance(db, user_id)
+            tickets = await ExchangeService.get_user_tickets(db, user_id)
+            lottery_tickets = tickets.get("LOTTERY_TICKET", 0)
+
+            # 有券可以无视日限直接抽奖，或者有足够积分且未达到日限
+            can_draw = lottery_tickets > 0 or (
+                balance >= config.cost_points and (config.daily_limit is None or today_count < config.daily_limit)
+            )
+
             result.update({
                 "today_count": today_count,
                 "remaining_today": config.daily_limit - today_count if config.daily_limit else None,
                 "balance": balance,
-                "can_draw": balance >= config.cost_points and (
-                    config.daily_limit is None or today_count < config.daily_limit
-                )
+                "lottery_tickets": lottery_tickets,  # 抽奖券数量
+                "can_draw": can_draw
             })
 
         return result
@@ -547,45 +616,72 @@ class LotteryService:
         }
 
         if user_id:
+            from app.services.exchange_service import ExchangeService
             today_count = await LotteryService.get_today_scratch_count(db, user_id, config.id)
             balance = await PointsService.get_balance(db, user_id)
+            tickets = await ExchangeService.get_user_tickets(db, user_id)
+            scratch_tickets = tickets.get("SCRATCH_TICKET", 0)
+
+            # 有券可以无视日限直接购买，或者有足够积分且未达到日限
+            can_draw = scratch_tickets > 0 or (
+                balance >= config.cost_points and (config.daily_limit is None or today_count < config.daily_limit)
+            )
+
             result.update({
                 "today_count": today_count,
                 "remaining_today": config.daily_limit - today_count if config.daily_limit else None,
                 "balance": balance,
-                "can_draw": balance >= config.cost_points and (
-                    config.daily_limit is None or today_count < config.daily_limit
-                )
+                "scratch_tickets": scratch_tickets,  # 刮刮乐券数量
+                "can_draw": can_draw
             })
 
         return result
 
     @staticmethod
-    async def buy_scratch_card(db: AsyncSession, user_id: int) -> Dict[str, Any]:
+    async def buy_scratch_card(
+        db: AsyncSession,
+        user_id: int,
+        use_ticket: bool = False
+    ) -> Dict[str, Any]:
         """
         购买刮刮乐卡片
         购买时后台已确定奖品，但不返回给前端
+
+        Args:
+            use_ticket: 是否优先使用刮刮乐券（免费）
         """
+        from app.services.exchange_service import ExchangeService
+
         config = await LotteryService.get_scratch_config(db)
         if not config:
             raise ValueError("当前没有进行中的刮刮乐活动")
 
-        # 检查每日次数限制
-        if config.daily_limit:
-            today_count = await LotteryService.get_today_scratch_count(db, user_id, config.id)
-            if today_count >= config.daily_limit:
-                raise ValueError(f"今日刮刮乐次数已达上限（{config.daily_limit}次）")
-
         try:
-            # 扣除积分
-            await PointsService.deduct_points(
-                db=db,
-                user_id=user_id,
-                amount=config.cost_points,
-                reason=PointsReason.LOTTERY_SPEND,
-                description="购买刮刮乐",
-                auto_commit=False
-            )
+            # 检查是否使用刮刮乐券（券不受日限约束）
+            used_ticket = False
+            actual_cost = config.cost_points
+
+            if use_ticket:
+                used_ticket = await ExchangeService.use_ticket(db, user_id, "SCRATCH_TICKET")
+
+            if used_ticket:
+                # 使用了刮刮乐券：不受日限约束，不扣积分
+                actual_cost = 0
+            else:
+                # 没有券或不使用券：检查日限，扣除积分
+                if config.daily_limit:
+                    today_count = await LotteryService.get_today_scratch_count(db, user_id, config.id)
+                    if today_count >= config.daily_limit:
+                        raise ValueError(f"今日刮刮乐次数已达上限（{config.daily_limit}次）")
+
+                await PointsService.deduct_points(
+                    db=db,
+                    user_id=user_id,
+                    amount=config.cost_points,
+                    reason=PointsReason.LOTTERY_SPEND,
+                    description="购买刮刮乐",
+                    auto_commit=False
+                )
 
             # 获取奖池并预选奖品
             prizes = await LotteryService.get_prizes(db, config.id)
@@ -595,7 +691,7 @@ class LotteryService:
             card = ScratchCard(
                 user_id=user_id,
                 config_id=config.id,
-                cost_points=config.cost_points,
+                cost_points=actual_cost,  # 使用实际消耗（使用券时为0）
                 prize_id=prize.id,
                 prize_type=prize.prize_type.value,
                 prize_name=prize.prize_name,
@@ -618,7 +714,8 @@ class LotteryService:
             return {
                 "success": True,
                 "card_id": card.id,
-                "cost_points": config.cost_points,
+                "cost_points": actual_cost,  # 实际消耗的积分（使用券时为0）
+                "used_ticket": used_ticket,  # 是否使用了刮刮乐券
                 "remaining_balance": balance
             }
 
@@ -671,16 +768,21 @@ class LotteryService:
             # 处理奖品发放
             extra_message = None
             prize_value = card.prize_value
+            api_key_code = None  # 完整的 API Key 兑换码
 
             if card.prize_type == PrizeType.ITEM.value:
                 await LotteryService._add_user_item(db, user_id, card.prize_value)
                 extra_message = f"获得{card.prize_name}x1"
 
             elif card.prize_type == PrizeType.API_KEY.value:
-                api_key = await LotteryService._assign_api_key(db, user_id)
-                if api_key:
-                    prize_value = api_key[:8] + "****"
-                    extra_message = "恭喜获得神秘兑换码！请在个人中心查看"
+                # 按用途（prize_value）从对应库存分配API Key
+                usage_type = card.prize_value or "刮刮乐"  # 默认用途为"刮刮乐"
+                api_key_info = await LotteryService._assign_api_key(db, user_id, usage_type)
+                if api_key_info:
+                    api_key_code = api_key_info["code"]  # 完整兑换码
+                    prize_value = api_key_info["code"][:8] + "****"
+                    quota_display = f"${api_key_info['quota']}" if api_key_info['quota'] else ""
+                    extra_message = f"恭喜获得{quota_display}兑换码！"
                     # 更新卡片记录实际发放的值
                     card.prize_value = prize_value
                 else:
@@ -721,7 +823,8 @@ class LotteryService:
                 "prize_type": card.prize_type,
                 "prize_value": prize_value,
                 "is_rare": card.is_rare,
-                "message": extra_message
+                "message": extra_message,
+                "api_key_code": api_key_code,  # 完整的 API Key 兑换码（仅 API_KEY 类型时有值）
             }
 
         except Exception:

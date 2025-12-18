@@ -11,6 +11,8 @@ import {
   X,
   ArrowLeft,
   TrendingUp,
+  Star,
+  Sparkles,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { predictionApi, pointsApi } from '../services'
@@ -167,28 +169,50 @@ export default function MyBetsPage() {
                 <Link
                   key={bet.id}
                   to={`/prediction/${bet.market_id}`}
-                  className="block p-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                  className={`block p-4 transition-all relative overflow-hidden ${
+                    bet.status === 'WON'
+                      ? 'bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 hover:from-green-100 hover:to-emerald-100 dark:hover:from-green-900/30 dark:hover:to-emerald-900/30'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
                 >
-                  <div className="flex items-center justify-between">
+                  {/* 中奖时的装饰效果 */}
+                  {bet.status === 'WON' && (
+                    <>
+                      <div className="absolute top-2 right-2 text-green-500 opacity-10">
+                        <Trophy className="w-16 h-16" />
+                      </div>
+                      <div className="absolute -left-2 top-1/2 -translate-y-1/2">
+                        <Star className="w-4 h-4 text-yellow-400 animate-pulse" />
+                      </div>
+                    </>
+                  )}
+                  <div className="flex items-center justify-between relative">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className={`w-5 h-5 rounded-full flex items-center justify-center ${
+                        <span className={`w-6 h-6 rounded-full flex items-center justify-center ${
                           bet.status === 'WON'
-                            ? 'bg-green-100 dark:bg-green-900/30'
+                            ? 'bg-gradient-to-br from-green-400 to-emerald-500 shadow-lg shadow-green-500/30'
                             : bet.status === 'LOST'
                             ? 'bg-red-100 dark:bg-red-900/30'
                             : bet.status === 'REFUNDED'
                             ? 'bg-blue-100 dark:bg-blue-900/30'
                             : 'bg-yellow-100 dark:bg-yellow-900/30'
                         }`}>
-                          {bet.status === 'WON' && <Check className="w-3 h-3 text-green-600" />}
+                          {bet.status === 'WON' && <Check className="w-3.5 h-3.5 text-white" />}
                           {bet.status === 'LOST' && <X className="w-3 h-3 text-red-500" />}
                           {bet.status === 'PLACED' && <Clock className="w-3 h-3 text-yellow-600" />}
                           {bet.status === 'REFUNDED' && <RefreshCw className="w-3 h-3 text-blue-500" />}
                         </span>
-                        <h4 className="font-medium text-slate-900 dark:text-white truncate">
+                        <h4 className={`font-medium truncate ${
+                          bet.status === 'WON'
+                            ? 'text-green-700 dark:text-green-400'
+                            : 'text-slate-900 dark:text-white'
+                        }`}>
                           {bet.market_title}
                         </h4>
+                        {bet.status === 'WON' && (
+                          <Sparkles className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                        )}
                       </div>
                       <div className="flex items-center gap-3 text-sm text-slate-500">
                         <span>选择: {bet.option_label}</span>
@@ -197,7 +221,9 @@ export default function MyBetsPage() {
                     </div>
                     <div className="text-right ml-4">
                       {bet.status === 'WON' && (
-                        <p className="text-green-600 font-bold">+{bet.payout_points}</p>
+                        <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white px-3 py-1 rounded-full shadow-lg shadow-green-500/30">
+                          <span className="font-bold text-lg">+{bet.payout_points}</span>
+                        </div>
                       )}
                       {bet.status === 'LOST' && (
                         <p className="text-red-500 text-sm">-{bet.stake_points}</p>

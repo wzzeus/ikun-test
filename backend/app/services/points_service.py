@@ -205,6 +205,45 @@ class PointsService:
         return ledger
 
     @staticmethod
+    async def record_zero_spend(
+        db: AsyncSession,
+        user_id: int,
+        reason: PointsReason,
+        ref_type: str = None,
+        ref_id: int = None,
+        description: str = None,
+        auto_commit: bool = True
+    ) -> PointsLedger:
+        """
+        记录一条 0 积分消耗的日志（用于统计使用券的次数）
+        不影响余额，只记录日志
+        """
+        # 获取当前余额
+        user_points = await PointsService.get_or_create_user_points(db, user_id, auto_commit=False)
+        current_balance = user_points.balance if user_points else 0
+
+        # 创建账本记录
+        ledger = PointsLedger(
+            user_id=user_id,
+            amount=0,
+            balance_after=current_balance,
+            reason=reason,
+            ref_type=ref_type,
+            ref_id=ref_id,
+            description=description,
+            request_id=str(uuid.uuid4())
+        )
+        db.add(ledger)
+
+        if auto_commit:
+            await db.commit()
+            await db.refresh(ledger)
+        else:
+            await db.flush()
+
+        return ledger
+
+    @staticmethod
     async def get_points_history(
         db: AsyncSession,
         user_id: int,
@@ -348,6 +387,20 @@ class SigninService:
                     description=f"连续签到{streak}天奖励",
                     auto_commit=False
                 )
+
+            # 记录任务进度（签到任务）
+            from app.services.task_service import TaskService
+            from app.models.task import TaskType
+            await TaskService.record_event(
+                db=db,
+                user_id=user_id,
+                task_type=TaskType.SIGNIN,
+                delta=1,
+                event_key=f"signin:{today.isoformat()}",
+                ref_type="daily_signin",
+                ref_id=signin.id,
+                auto_claim=True,
+            )
 
             await db.commit()
 

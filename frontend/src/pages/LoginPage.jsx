@@ -54,11 +54,21 @@ export default function LoginPage() {
     // 解码用户信息
     const user = userParam ? decodeBase64UrlJson(userParam) : null
 
-    // 登录并跳转
+    // 登录并清除 hash
     login(user, token)
     trackLogin('linuxdo')
     window.location.hash = ''
-    navigate(next || '/', { replace: true })
+
+    // 检查是否需要角色选择引导
+    // 如果用户还没选过角色（role_selected 为 false），跳转到引导页
+    if (user && !user.role_selected) {
+      // 带上原来的 next 参数，选完角色后继续跳转
+      const guidePath = next ? `/role-guide?next=${encodeURIComponent(next)}` : '/role-guide'
+      navigate(guidePath, { replace: true })
+    } else {
+      // 已选过角色，直接跳转
+      navigate(next || '/', { replace: true })
+    }
   }, [login, navigate, nextFromQuery])
 
   /**

@@ -21,7 +21,6 @@ from app.models.achievement import (
 )
 from app.models.system_log import SystemLog, LogAction
 from app.models.request_log import RequestLog
-from app.models.easter_egg import EasterEggCode, EasterEggRedemption, EasterEggRewardType, EasterEggStatus
 
 __all__ = [
     "Base",
@@ -51,8 +50,4 @@ __all__ = [
     "SystemLog",
     "LogAction",
     "RequestLog",
-    "EasterEggCode",
-    "EasterEggRedemption",
-    "EasterEggRewardType",
-    "EasterEggStatus",
 ]

@@ -16,6 +16,8 @@ export const userApi = {
   getMe: () => api.get('/users/me'),
   updateMe: (data) => api.put('/users/me', data),
   getUser: (id) => api.get(`/users/${id}`),
+  // 角色选择（新用户引导）
+  selectRole: (role) => api.post('/users/me/select-role', { role }),
 }
 
 /**
@@ -143,6 +145,10 @@ export const achievementApi = {
   getUserBadges: (userId) => api.get(`/users/${userId}/badges`),
   // 获取用户统计（公开）
   getUserStats: (userId) => api.get(`/users/${userId}/stats`),
+  // 获取可兑换积分的徽章列表
+  getExchangeableBadges: () => api.get('/users/me/badges/exchangeable'),
+  // 徽章兑换积分
+  exchangeBadge: (achievementKey) => api.post('/users/me/badges/exchange', { achievement_key: achievementKey }),
 }
 
 /**
@@ -165,8 +171,8 @@ export const pointsApi = {
 export const lotteryApi = {
   // 获取抽奖信息
   getInfo: () => api.get('/lottery/info'),
-  // 执行抽奖
-  draw: (requestId) => api.post('/lottery/draw', { request_id: requestId }),
+  // 执行抽奖（use_ticket: 是否优先使用抽奖券）
+  draw: (requestId, useTicket = false) => api.post('/lottery/draw', { request_id: requestId, use_ticket: useTicket }),
   // 获取抽奖历史
   getHistory: (params) => api.get('/lottery/history', { params }),
   // 获取中奖记录
@@ -179,10 +185,16 @@ export const lotteryApi = {
   // 刮刮乐
   // 获取刮刮乐信息
   getScratchInfo: () => api.get('/lottery/scratch/info'),
-  // 购买刮刮乐
-  buyScratchCard: () => api.post('/lottery/scratch/buy'),
+  // 购买刮刮乐（use_ticket: 是否优先使用刮刮乐券）
+  buyScratchCard: (useTicket = false) => api.post('/lottery/scratch/buy', { use_ticket: useTicket }),
   // 刮开刮刮乐
   revealScratchCard: (cardId) => api.post(`/lottery/scratch/${cardId}/reveal`),
+
+  // 彩蛋
+  // 获取彩蛋库存状态
+  getEasterEggStatus: () => api.get('/lottery/easter-egg/status'),
+  // 领取彩蛋
+  claimEasterEgg: () => api.post('/lottery/easter-egg/claim'),
 }
 
 /**
@@ -215,7 +227,7 @@ export const adminApi2 = {
   // API Key 管理
   getApiKeys: (params) => api.get('/admin/api-keys', { params }),
   createApiKey: (data) => api.post('/admin/api-keys', data),
-  batchCreateApiKeys: (codes) => api.post('/admin/api-keys/batch', codes),
+  batchCreateApiKeys: (codes) => api.post('/admin/api-keys/batch', { items: codes }),
   deleteApiKey: (id) => api.delete(`/admin/api-keys/${id}`),
 
   // API Key 监控（参赛者消耗）
@@ -245,6 +257,12 @@ export const adminApi2 = {
   getRangeStats: (startDate, endDate) => api.get('/admin/activity/stats/range', { params: { start_date: startDate, end_date: endDate } }),
   getExchangeItemsAdmin: () => api.get('/admin/exchange/items'),
   updateExchangeItem: (id, data) => api.put(`/admin/exchange/items/${id}`, data),
+
+  // 老虎机管理
+  getSlotMachineConfig: () => api.get('/slot-machine/admin/config'),
+  updateSlotMachineConfig: (data) => api.put('/slot-machine/admin/config', data),
+  replaceSlotMachineSymbols: (data) => api.put('/slot-machine/admin/symbols', data),
+  getSlotMachineStats: (days = 7) => api.get('/slot-machine/admin/stats', { params: { days } }),
 }
 
 /**
@@ -307,4 +325,23 @@ export const predictionApi = {
   settleMarket: (id, winnerIds) => api.post(`/prediction/admin/markets/${id}/settle`, { winner_option_ids: winnerIds }),
   // 管理员：取消竞猜
   cancelMarket: (id) => api.post(`/prediction/admin/markets/${id}/cancel`),
+}
+
+/**
+ * 每日任务系统 API
+ */
+export const taskApi = {
+  // 获取我的任务列表（含进度）
+  // schedule: 'DAILY' | 'WEEKLY'
+  getMyTasks: (schedule = 'DAILY') => api.get('/tasks/me', { params: { schedule } }),
+  // 领取任务奖励
+  claimReward: (taskId) => api.post(`/tasks/me/${taskId}/claim`),
+  // 管理员：获取任务定义列表
+  getDefinitions: (params) => api.get('/tasks/admin/definitions', { params }),
+  // 管理员：创建任务定义
+  createDefinition: (data) => api.post('/tasks/admin/definitions', data),
+  // 管理员：更新任务定义
+  updateDefinition: (id, data) => api.put(`/tasks/admin/definitions/${id}`, data),
+  // 管理员：删除任务定义
+  deleteDefinition: (id) => api.delete(`/tasks/admin/definitions/${id}`),
 }

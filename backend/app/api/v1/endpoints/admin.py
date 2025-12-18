@@ -682,22 +682,86 @@ async def delete_prize(
 @router.get("/api-keys")
 async def list_api_keys(
     status: Optional[str] = None,
-    limit: int = Query(20, le=100),
+    description: Optional[str] = None,
+    username: Optional[str] = None,
+    limit: int = Query(10, le=100),
     offset: int = 0,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """获取 API Key 列表"""
+    """获取 API Key 列表（带分页、用户名和筛选）"""
     require_admin(current_user)
 
-    query = select(ApiKeyCode)
+    from sqlalchemy import func, and_
+
+    # 构建查询条件列表
+    filters = []
+
+    # 状态筛选
     if status:
         from app.models.points import ApiKeyStatus
-        query = query.where(ApiKeyCode.status == ApiKeyStatus(status))
+        try:
+            filters.append(ApiKeyCode.status == ApiKeyStatus(status))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"无效的状态值: {status}")
 
-    query = query.order_by(ApiKeyCode.id.asc()).offset(offset).limit(limit)
-    result = await db.execute(query)
+    # 描述筛选（模糊匹配）
+    if description:
+        filters.append(ApiKeyCode.description.ilike(f"%{description}%"))
+
+    # 用户名筛选（需要先查找匹配的用户ID）
+    user_ids_filter = None
+    if username:
+        user_query = select(User.id).where(
+            (User.username.ilike(f"%{username}%")) |
+            (User.display_name.ilike(f"%{username}%"))
+        )
+        user_result = await db.execute(user_query)
+        matched_user_ids = [row.id for row in user_result]
+        if matched_user_ids:
+            filters.append(ApiKeyCode.assigned_user_id.in_(matched_user_ids))
+        else:
+            # 没有匹配的用户，返回空结果
+            return {
+                "items": [],
+                "total": 0,
+                "limit": limit,
+                "offset": offset
+            }
+
+    # 构建查询
+    count_query = select(func.count(ApiKeyCode.id))
+    data_query = select(ApiKeyCode)
+
+    if filters:
+        combined_filter = and_(*filters)
+        count_query = count_query.where(combined_filter)
+        data_query = data_query.where(combined_filter)
+
+    # 查询总数
+    total_result = await db.execute(count_query)
+    total = total_result.scalar()
+
+    # 分页查询 API Keys
+    data_query = (
+        data_query
+        .order_by(ApiKeyCode.id.asc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(data_query)
     keys = result.scalars().all()
+
+    # 批量查询已分配的用户名（避免N+1查询）
+    assigned_user_ids = [k.assigned_user_id for k in keys if k.assigned_user_id is not None]
+    user_map = {}
+    if assigned_user_ids:
+        user_query = select(User.id, User.username, User.display_name).where(
+            User.id.in_(assigned_user_ids)
+        )
+        user_result = await db.execute(user_query)
+        for row in user_result:
+            user_map[row.id] = row.display_name or row.username
 
     return {
         "items": [
@@ -707,13 +771,17 @@ async def list_api_keys(
                 "quota": float(k.quota) if k.quota else 0,
                 "status": k.status.value,
                 "assigned_user_id": k.assigned_user_id,
+                "assigned_username": user_map.get(k.assigned_user_id) if k.assigned_user_id is not None else None,
                 "assigned_at": k.assigned_at.isoformat() if k.assigned_at else None,
                 "expires_at": k.expires_at.isoformat() if k.expires_at else None,
                 "description": k.description,
                 "created_at": k.created_at.isoformat() if k.created_at else None
             }
             for k in keys
-        ]
+        ],
+        "total": total,
+        "limit": limit,
+        "offset": offset
     }
 
 
@@ -739,17 +807,28 @@ async def create_api_key(
     return {"success": True, "id": key.id}
 
 
+class BatchApiKeyCreateRequest(BaseModel):
+    """批量创建 API Key 请求"""
+    items: List[ApiKeyCreateRequest]
+
+
 @router.post("/api-keys/batch")
 async def batch_create_api_keys(
-    codes: List[ApiKeyCreateRequest],
+    request: BatchApiKeyCreateRequest = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """批量创建 API Key"""
+    """批量创建 API Key（支持两种格式：{items: [...]} 或直接传数组）"""
     require_admin(current_user)
 
+    # 获取 items 列表
+    items = request.items if request else []
+
+    if not items:
+        return {"success": False, "message": "没有要创建的兑换码", "created": 0}
+
     created = 0
-    for item in codes:
+    for item in items:
         key = ApiKeyCode(
             code=item.code,
             quota=Decimal(str(item.quota)),

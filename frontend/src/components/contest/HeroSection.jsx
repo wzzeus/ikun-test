@@ -1,4 +1,4 @@
-import { Flame, Edit3, Rocket, Shield, Heart, TrendingUp, ClipboardCheck, Settings, Sparkles } from 'lucide-react'
+import { Flame, Edit3, Rocket, Shield, Heart, TrendingUp, ClipboardCheck, Settings, Sparkles, Target } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { useAuthStore } from '../../stores/authStore'
@@ -111,7 +111,7 @@ export default function HeroSection() {
         </p>
 
         {/* CTA 按钮 */}
-        <div className="mt-14 flex justify-center gap-6 flex-wrap">
+        <div className="mt-14 flex justify-center gap-4 flex-wrap">
           {buttonContent.isLink ? (
             <Button
               asChild
@@ -160,16 +160,28 @@ export default function HeroSection() {
               </Button>
             </>
           ) : (
-            <Button
-              asChild
-              size="lg"
-              className="px-8 py-6 border-2 border-purple-300 dark:border-purple-600 bg-purple-50/50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 hover:border-purple-400 dark:hover:border-purple-500 text-purple-700 dark:text-purple-300 font-bold text-xl transition-all hover:-translate-y-1"
-            >
-              <Link to="/activity">
-                <Sparkles className="w-5 h-5 mr-2" />
-                活动中心
-              </Link>
-            </Button>
+            <>
+              <Button
+                asChild
+                size="lg"
+                className="px-8 py-6 border-2 border-purple-300 dark:border-purple-600 bg-purple-50/50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 hover:border-purple-400 dark:hover:border-purple-500 text-purple-700 dark:text-purple-300 font-bold text-xl transition-all hover:-translate-y-1"
+              >
+                <Link to="/activity">
+                  <Sparkles className="w-5 h-5 mr-2" />
+                  疯狂娱乐城
+                </Link>
+              </Button>
+              <Button
+                asChild
+                size="lg"
+                className="px-8 py-6 border-2 border-blue-300 dark:border-blue-600 bg-blue-50/50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 hover:border-blue-400 dark:hover:border-blue-500 text-blue-700 dark:text-blue-300 font-bold text-xl transition-all hover:-translate-y-1"
+              >
+                <Link to="/tasks">
+                  <Target className="w-5 h-5 mr-2" />
+                  每日任务
+                </Link>
+              </Button>
+            </>
           )}
         </div>
 

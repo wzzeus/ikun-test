@@ -16,6 +16,7 @@ from app.models.base import BaseModel
 
 class PointsReason(str, enum.Enum):
     """积分变动原因"""
+    REGISTER_BONUS = "REGISTER_BONUS"  # 新用户注册奖励
     SIGNIN_DAILY = "SIGNIN_DAILY"
     SIGNIN_STREAK_BONUS = "SIGNIN_STREAK_BONUS"
     CHEER_GIVE = "CHEER_GIVE"
@@ -30,7 +31,11 @@ class PointsReason(str, enum.Enum):
     ACHIEVEMENT_CLAIM = "ACHIEVEMENT_CLAIM"
     EASTER_EGG_REDEEM = "EASTER_EGG_REDEEM"  # 彩蛋兑换
     GACHA_SPEND = "GACHA_SPEND"  # 扭蛋机消费
+    GACHA_WIN = "GACHA_WIN"  # 扭蛋机中奖
     EXCHANGE_SPEND = "EXCHANGE_SPEND"  # 积分兑换消费
+    TASK_REWARD = "TASK_REWARD"  # 任务奖励
+    TASK_CHAIN_BONUS = "TASK_CHAIN_BONUS"  # 任务链额外奖励
+    BADGE_EXCHANGE = "BADGE_EXCHANGE"  # 徽章兑换积分
 
 
 class PrizeType(str, enum.Enum):

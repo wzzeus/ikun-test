@@ -3,9 +3,10 @@
 """
 import base64
 import json
+import re
 from secrets import token_urlsafe
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -29,8 +30,41 @@ from app.services.github_oauth import (
     fetch_github_emails,
     get_primary_email,
 )
+from app.services.points_service import PointsService
+from app.models.points import PointsReason
+
+# 新用户注册奖励积分
+REGISTER_BONUS_POINTS = 500
 
 router = APIRouter()
+
+
+def _sanitize_next_path(next_path: Optional[str]) -> str:
+    """
+    校验并清理 next_path 参数，防止参数注入攻击
+
+    规则：
+    1. 必须是相对路径（以 / 开头）
+    2. 不能包含 & # ? 等可能导致参数注入的字符
+    3. 不能是外部 URL（防止开放重定向）
+    """
+    if not next_path:
+        return ""
+
+    # 只允许以 / 开头的相对路径
+    if not next_path.startswith("/"):
+        return ""
+
+    # 禁止包含可能导致参数注入的特殊字符
+    if re.search(r'[&#?]', next_path):
+        return ""
+
+    # 禁止协议前缀（防止 //evil.com 这种相对协议 URL）
+    if next_path.startswith("//"):
+        return ""
+
+    # 返回 URL 编码后的路径
+    return quote(next_path, safe="/")
 
 
 def _b64url_json(data: dict) -> str:
@@ -98,8 +132,10 @@ async def _upsert_linuxdo_user(db: AsyncSession, userinfo: dict) -> User:
     trust_level = userinfo.get("trust_level")
     silenced = bool(userinfo.get("silenced", False))
 
+    is_new_user = False
     if user is None:
         # 创建新用户
+        is_new_user = True
         username = await _generate_unique_username(db, linux_username, linux_do_id)
         user = User(
             email=None,
@@ -131,6 +167,19 @@ async def _upsert_linuxdo_user(db: AsyncSession, userinfo: dict) -> User:
 
     await db.commit()
     await db.refresh(user)
+
+    # 新用户赠送注册奖励积分
+    if is_new_user and REGISTER_BONUS_POINTS > 0:
+        await PointsService.add_points(
+            db=db,
+            user_id=user.id,
+            amount=REGISTER_BONUS_POINTS,
+            reason=PointsReason.REGISTER_BONUS,
+            ref_type="register",
+            ref_id=user.id,
+            description=f"新用户注册奖励 {REGISTER_BONUS_POINTS} 积分",
+        )
+
     return user
 
 
@@ -191,8 +240,10 @@ async def _upsert_github_user(db: AsyncSession, userinfo: dict, email: Optional[
     avatar_url = userinfo.get("avatar_url") or None
     github_email = email or userinfo.get("email")
 
+    is_new_user = False
     if user is None:
         # 创建新用户
+        is_new_user = True
         username = await _generate_unique_username_for_github(db, github_username, github_id)
         user = User(
             email=github_email,
@@ -221,6 +272,19 @@ async def _upsert_github_user(db: AsyncSession, userinfo: dict, email: Optional[
 
     await db.commit()
     await db.refresh(user)
+
+    # 新用户赠送注册奖励积分
+    if is_new_user and REGISTER_BONUS_POINTS > 0:
+        await PointsService.add_points(
+            db=db,
+            user_id=user.id,
+            amount=REGISTER_BONUS_POINTS,
+            reason=PointsReason.REGISTER_BONUS,
+            ref_type="register",
+            ref_id=user.id,
+            description=f"新用户注册奖励 {REGISTER_BONUS_POINTS} 积分",
+        )
+
     return user
 
 
@@ -364,7 +428,7 @@ async def linuxdo_callback(
     })
 
     # 构建重定向 URL
-    next_path = request.cookies.get("linuxdo_oauth_next") or ""
+    next_path = _sanitize_next_path(request.cookies.get("linuxdo_oauth_next"))
     frontend = settings.FRONTEND_URL.rstrip("/")
     redirect_to = f"{frontend}/login#token={jwt_token}"
 
@@ -377,7 +441,9 @@ async def linuxdo_callback(
         "username": user.username,
         "display_name": user.display_name,
         "avatar_url": user.avatar_url,
-        "role": user.role,  # admin / contestant / spectator
+        "role": user.role,  # admin / reviewer / contestant / spectator
+        "original_role": user.original_role,  # 原始角色（管理员切换用）
+        "role_selected": user.role_selected,  # 是否已完成角色选择引导
         "linux_do_id": user.linux_do_id,
         "trust_level": user.trust_level,
         "is_silenced": user.is_silenced,
@@ -509,7 +575,7 @@ async def github_callback(
     })
 
     # 构建重定向 URL
-    next_path = request.cookies.get("github_oauth_next") or ""
+    next_path = _sanitize_next_path(request.cookies.get("github_oauth_next"))
     frontend = settings.FRONTEND_URL.rstrip("/")
     redirect_to = f"{frontend}/login#token={jwt_token}"
 
@@ -523,6 +589,8 @@ async def github_callback(
         "display_name": user.display_name,
         "avatar_url": user.avatar_url,
         "role": user.role,
+        "original_role": user.original_role,  # 原始角色（管理员切换用）
+        "role_selected": user.role_selected,  # 是否已完成角色选择引导
         "email": user.email or user.github_email,
         "github_id": user.github_id,
         "github_username": user.github_username,

@@ -433,6 +433,23 @@ class PredictionService:
             # 重新计算所有选项的赔率
             await PredictionService._update_odds(db, market)
 
+            # 确保 bet 有 id
+            await db.flush()
+
+            # 记录任务进度（竞猜任务）
+            from app.services.task_service import TaskService
+            from app.models.task import TaskType
+            await TaskService.record_event(
+                db=db,
+                user_id=user_id,
+                task_type=TaskType.PREDICTION,
+                delta=1,
+                event_key=f"bet:{bet.id}",
+                ref_type="prediction_bet",
+                ref_id=bet.id,
+                auto_claim=True,
+            )
+
             await db.commit()
             await db.refresh(bet)
             return bet

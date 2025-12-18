@@ -1,7 +1,9 @@
 """
 抽奖系统 API
 """
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from sqlalchemy import select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional, List
@@ -10,6 +12,7 @@ from app.core.database import get_db
 from app.core.rate_limit import limiter, RateLimits
 from app.api.v1.endpoints.user import get_current_user_dep as get_current_user, get_current_user_optional
 from app.models.user import User
+from app.models.points import ApiKeyCode, ApiKeyStatus
 from app.services.lottery_service import LotteryService
 
 router = APIRouter()
@@ -19,6 +22,7 @@ router = APIRouter()
 
 class DrawRequest(BaseModel):
     request_id: Optional[str] = None
+    use_ticket: bool = False  # 是否优先使用抽奖券
 
 
 class DrawResponse(BaseModel):
@@ -31,7 +35,9 @@ class DrawResponse(BaseModel):
     is_rare: bool = False
     message: Optional[str] = None
     cost_points: Optional[int] = None
+    used_ticket: bool = False  # 是否使用了抽奖券
     balance: Optional[int] = None
+    api_key_code: Optional[str] = None  # API Key 完整兑换码（仅当奖品类型为 API_KEY 时返回）
 
 
 class PrizeInfo(BaseModel):
@@ -54,6 +60,7 @@ class LotteryInfoResponse(BaseModel):
     today_count: Optional[int] = None
     remaining_today: Optional[int] = None
     balance: Optional[int] = None
+    lottery_tickets: Optional[int] = None  # 抽奖券数量
     can_draw: Optional[bool] = None
     message: Optional[str] = None
 
@@ -114,7 +121,8 @@ async def draw(
     """执行抽奖"""
     try:
         request_id = body.request_id if body else None
-        result = await LotteryService.draw(db, current_user.id, request_id)
+        use_ticket = body.use_ticket if body else False
+        result = await LotteryService.draw(db, current_user.id, request_id, use_ticket=use_ticket)
 
         # 记录日志
         from app.services.log_service import log_lottery
@@ -198,14 +206,20 @@ class ScratchInfoResponse(BaseModel):
     today_count: int = 0
     remaining_today: Optional[int] = None
     balance: int = 0
+    scratch_tickets: Optional[int] = None  # 刮刮乐券数量
     can_draw: bool = False
     message: Optional[str] = None
+
+
+class ScratchBuyRequest(BaseModel):
+    use_ticket: bool = False  # 是否优先使用刮刮乐券
 
 
 class ScratchBuyResponse(BaseModel):
     success: bool
     card_id: int
     cost_points: int
+    used_ticket: bool = False  # 是否使用了刮刮乐券
     remaining_balance: int
 
 
@@ -216,6 +230,7 @@ class ScratchRevealResponse(BaseModel):
     prize_value: Optional[str] = None
     is_rare: bool = False
     message: Optional[str] = None
+    api_key_code: Optional[str] = None  # API Key 完整兑换码（仅当奖品类型为 API_KEY 时返回）
 
 
 @router.get("/scratch/info", response_model=ScratchInfoResponse)
@@ -232,12 +247,14 @@ async def get_scratch_info(
 @limiter.limit(RateLimits.LOTTERY)
 async def buy_scratch_card(
     request: Request,
+    body: ScratchBuyRequest = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """购买刮刮乐（购买时确定奖品，但不返回给前端）"""
     try:
-        result = await LotteryService.buy_scratch_card(db, current_user.id)
+        use_ticket = body.use_ticket if body else False
+        result = await LotteryService.buy_scratch_card(db, current_user.id, use_ticket=use_ticket)
         return ScratchBuyResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -268,3 +285,143 @@ async def reveal_scratch_card(
         return ScratchRevealResponse(**result)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ========== 彩蛋 API Key 领取接口 ==========
+
+class EasterEggClaimResponse(BaseModel):
+    """彩蛋领取响应"""
+    success: bool
+    code: Optional[str] = None
+    quota: Optional[float] = None
+    message: str
+    has_stock: bool = True
+
+
+class EasterEggStatusResponse(BaseModel):
+    """彩蛋状态响应"""
+    has_stock: bool
+    stock_count: int = 0
+
+
+@router.get("/easter-egg/status", response_model=EasterEggStatusResponse)
+async def get_easter_egg_status(
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    获取彩蛋库存状态
+    - 检查是否有用途为"彩蛋"的可用 API Key
+    """
+    from sqlalchemy import func
+    result = await db.execute(
+        select(func.count(ApiKeyCode.id)).where(
+            and_(
+                ApiKeyCode.status == ApiKeyStatus.AVAILABLE,
+                ApiKeyCode.description == "彩蛋"
+            )
+        )
+    )
+    stock_count = result.scalar() or 0
+
+    return EasterEggStatusResponse(
+        has_stock=stock_count > 0,
+        stock_count=stock_count
+    )
+
+
+@router.post("/easter-egg/claim", response_model=EasterEggClaimResponse)
+@limiter.limit("3/minute")  # 限制频率防止滥用
+async def claim_easter_egg(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    领取彩蛋 API Key
+    - 从用途为"彩蛋"的可用 API Key 库存中随机分配一个
+    - 每个用户只能领取一次彩蛋
+    - 使用乐观锁防止并发问题
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    user_id = current_user.id
+
+    # 1. 检查用户是否已经领取过彩蛋
+    existing_result = await db.execute(
+        select(ApiKeyCode).where(
+            and_(
+                ApiKeyCode.assigned_user_id == user_id,
+                ApiKeyCode.description == "彩蛋"
+            )
+        )
+    )
+    existing_key = existing_result.scalar_one_or_none()
+
+    if existing_key:
+        # 已经领取过，返回之前领取的
+        return EasterEggClaimResponse(
+            success=True,
+            code=existing_key.code,
+            quota=float(existing_key.quota) if existing_key.quota else 0,
+            message="你已经发现过这个彩蛋啦！这是你的专属奖励~",
+            has_stock=True
+        )
+
+    # 2. 查找可用的彩蛋 API Key（用途为"彩蛋"）
+    # 使用 FOR UPDATE SKIP LOCKED 避免并发冲突
+    result = await db.execute(
+        select(ApiKeyCode)
+        .where(
+            and_(
+                ApiKeyCode.status == ApiKeyStatus.AVAILABLE,
+                ApiKeyCode.description == "彩蛋"
+            )
+        )
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    api_key = result.scalar_one_or_none()
+
+    if not api_key:
+        return EasterEggClaimResponse(
+            success=False,
+            message="哎呀，彩蛋已经被小伙伴们领完了，下次早点来哦~",
+            has_stock=False
+        )
+
+    # 3. 分配给用户
+    now = datetime.utcnow()
+    update_result = await db.execute(
+        update(ApiKeyCode)
+        .where(
+            and_(
+                ApiKeyCode.id == api_key.id,
+                ApiKeyCode.status == ApiKeyStatus.AVAILABLE
+            )
+        )
+        .values(
+            status=ApiKeyStatus.ASSIGNED,
+            assigned_user_id=user_id,
+            assigned_at=now
+        )
+    )
+
+    if update_result.rowcount == 0:
+        # 被其他人抢走了
+        return EasterEggClaimResponse(
+            success=False,
+            message="手慢了一步，这个彩蛋被抢走了，再试一次吧！",
+            has_stock=True
+        )
+
+    await db.commit()
+
+    logger.info(f"彩蛋领取成功: user_id={user_id}, api_key_id={api_key.id}")
+
+    return EasterEggClaimResponse(
+        success=True,
+        code=api_key.code,
+        quota=float(api_key.quota) if api_key.quota else 0,
+        message="恭喜你发现了隐藏彩蛋！这是专属于你的奖励~",
+        has_stock=True
+    )

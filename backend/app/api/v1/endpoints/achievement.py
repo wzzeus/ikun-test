@@ -6,19 +6,23 @@
 - 获取用户成就
 - 领取成就奖励
 - 管理徽章展示
+- 徽章兑换积分
 """
 import logging
-from typing import Optional
+from typing import Optional, List
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.models.user import User
-from app.models.achievement import AchievementDefinition, UserStats
+from app.models.achievement import AchievementDefinition, UserStats, UserAchievement, AchievementStatus
+from app.models.points import PointsReason, PointsLedger
 from app.services import achievement_service
+from app.services.points_service import PointsService
 from app.api.v1.endpoints.registration import get_current_user, get_optional_user
 
 router = APIRouter()
@@ -33,6 +37,22 @@ class BadgeShowcaseRequest(BaseModel):
     """设置徽章展示请求"""
     slot: int
     achievement_key: str
+
+
+class BadgeExchangeRequest(BaseModel):
+    """徽章兑换积分请求"""
+    achievement_key: str
+
+
+# 徽章兑换积分配置（根据稀有度）
+BADGE_EXCHANGE_RATES = {
+    "bronze": 50,     # 青铜徽章兑换50积分
+    "silver": 100,    # 白银徽章兑换100积分
+    "gold": 200,      # 黄金徽章兑换200积分
+    "diamond": 500,   # 钻石徽章兑换500积分
+    "star": 1000,     # 星耀徽章兑换1000积分
+    "king": 2000,     # 王者徽章兑换2000积分
+}
 
 
 # ============================================================================
@@ -315,3 +335,164 @@ async def get_user_stats(
         "achievements_unlocked": stats.achievements_unlocked,
         "max_consecutive_days": stats.max_consecutive_days,
     }
+
+
+# ============================================================================
+# 徽章兑换积分
+# ============================================================================
+
+@router.get(
+    "/users/me/badges/exchangeable",
+    summary="获取可兑换的徽章列表",
+    description="获取当前用户可以兑换积分的徽章列表（已解锁/已领取且未兑换过的徽章）。",
+)
+async def get_exchangeable_badges(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """获取可兑换积分的徽章列表"""
+    # 查询用户已解锁的成就
+    result = await db.execute(
+        select(UserAchievement, AchievementDefinition)
+        .join(AchievementDefinition, UserAchievement.achievement_key == AchievementDefinition.achievement_key)
+        .where(
+            UserAchievement.user_id == current_user.id,
+            UserAchievement.status.in_([AchievementStatus.UNLOCKED.value, AchievementStatus.CLAIMED.value])
+        )
+    )
+    rows = result.all()
+
+    # 查询已兑换过的徽章
+    user_achievement_ids = [user_ach.id for user_ach, _ in rows]
+    exchanged_ids = set()
+    if user_achievement_ids:
+        exchanged_result = await db.execute(
+            select(PointsLedger.ref_id).where(
+                PointsLedger.user_id == current_user.id,
+                PointsLedger.reason == PointsReason.BADGE_EXCHANGE,
+                PointsLedger.ref_type == "badge_exchange",
+                PointsLedger.ref_id.in_(user_achievement_ids),
+            )
+        )
+        exchanged_ids = {row[0] for row in exchanged_result.all()}
+
+    badges = []
+    for user_ach, definition in rows:
+        # 排除已兑换过的徽章
+        if user_ach.id in exchanged_ids:
+            continue
+        tier = definition.badge_tier or "bronze"
+        exchange_points = BADGE_EXCHANGE_RATES.get(tier, 50)
+        badges.append({
+            "achievement_key": definition.achievement_key,
+            "name": definition.name,
+            "description": definition.description,
+            "icon": definition.badge_icon,
+            "tier": tier,
+            "exchange_points": exchange_points,
+            "unlocked_at": user_ach.unlocked_at.isoformat() if user_ach.unlocked_at else None,
+        })
+
+    return {
+        "items": badges,
+        "total": len(badges),
+        "exchange_rates": BADGE_EXCHANGE_RATES,
+    }
+
+
+@router.post(
+    "/users/me/badges/exchange",
+    summary="徽章兑换积分",
+    description="将已获得的徽章兑换为积分。每个徽章可多次兑换（如果多次获得）。",
+)
+async def exchange_badge_for_points(
+    payload: BadgeExchangeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """徽章兑换积分"""
+    achievement_key = payload.achievement_key
+
+    # 检查徽章定义是否存在
+    result = await db.execute(
+        select(AchievementDefinition).where(
+            AchievementDefinition.achievement_key == achievement_key
+        )
+    )
+    definition = result.scalar_one_or_none()
+
+    if not definition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="徽章不存在"
+        )
+
+    # 检查用户是否拥有该徽章
+    result = await db.execute(
+        select(UserAchievement).where(
+            UserAchievement.user_id == current_user.id,
+            UserAchievement.achievement_key == achievement_key,
+            UserAchievement.status.in_([AchievementStatus.UNLOCKED.value, AchievementStatus.CLAIMED.value])
+        )
+    )
+    user_achievement = result.scalar_one_or_none()
+
+    if not user_achievement:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="你还没有获得这个徽章"
+        )
+
+    # 防重复兑换检查
+    existing_exchange = await db.execute(
+        select(PointsLedger.id).where(
+            PointsLedger.user_id == current_user.id,
+            PointsLedger.reason == PointsReason.BADGE_EXCHANGE,
+            PointsLedger.ref_type == "badge_exchange",
+            PointsLedger.ref_id == user_achievement.id,
+        )
+    )
+    if existing_exchange.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="该徽章已兑换过"
+        )
+
+    # 计算兑换积分
+    tier = definition.badge_tier or "bronze"
+    exchange_points = BADGE_EXCHANGE_RATES.get(tier, 50)
+
+    try:
+        # 发放积分
+        await PointsService.add_points(
+            db=db,
+            user_id=current_user.id,
+            amount=exchange_points,
+            reason=PointsReason.BADGE_EXCHANGE,
+            ref_type="badge_exchange",
+            ref_id=user_achievement.id,
+            description=f"徽章兑换: {definition.name}",
+            auto_commit=False
+        )
+
+        await db.commit()
+
+        # 获取更新后的余额
+        balance = await PointsService.get_balance(db, current_user.id)
+
+        return {
+            "success": True,
+            "achievement_key": achievement_key,
+            "badge_name": definition.name,
+            "points_earned": exchange_points,
+            "balance": balance,
+            "message": f"成功兑换「{definition.name}」徽章，获得 {exchange_points} 积分！"
+        }
+
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"徽章兑换失败: user_id={current_user.id}, key={achievement_key}, error={str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="兑换失败，请稍后再试"
+        )

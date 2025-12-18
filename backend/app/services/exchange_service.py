@@ -209,11 +209,14 @@ class ExchangeService:
                 reward_message = f"获得{quantity}张扭蛋券"
 
             elif item.item_type == ExchangeItemType.API_KEY:
-                # 分配API Key
-                api_key = await ExchangeService._assign_api_key(db, user_id)
-                if api_key:
-                    reward_value = api_key[:8] + "****"
-                    reward_message = "获得API Key兑换码，请在个人中心查看"
+                # 分配API Key，按用途（item_value）从对应库存分配
+                # item_value 存储用途类型，对应 api_key_codes.description
+                usage_type = item.item_value or "兑换"  # 默认用途为"兑换"
+                api_key_info = await ExchangeService._assign_api_key(db, user_id, usage_type)
+                if api_key_info:
+                    reward_value = api_key_info["code"][:8] + "****"
+                    quota_display = f"${api_key_info['quota']}" if api_key_info['quota'] else ""
+                    reward_message = f"获得{quota_display}API Key兑换码，请在个人中心查看"
                 else:
                     # 库存不足，退还积分
                     await PointsService.add_points(
@@ -244,6 +247,23 @@ class ExchangeService:
             )
             db.add(record)
 
+            # 确保 record 有 id
+            await db.flush()
+
+            # 记录任务进度（兑换任务）
+            from app.services.task_service import TaskService
+            from app.models.task import TaskType
+            await TaskService.record_event(
+                db=db,
+                user_id=user_id,
+                task_type=TaskType.EXCHANGE,
+                delta=quantity,
+                event_key=f"exchange:{record.id}",
+                ref_type="exchange_record",
+                ref_id=record.id,
+                auto_claim=True,
+            )
+
             await db.commit()
 
             # 获取更新后的余额
@@ -264,13 +284,30 @@ class ExchangeService:
             raise
 
     @staticmethod
-    async def _assign_api_key(db: AsyncSession, user_id: int) -> Optional[str]:
-        """分配一个API Key给用户"""
+    async def _assign_api_key(
+        db: AsyncSession,
+        user_id: int,
+        usage_type: str = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        分配一个API Key给用户
+
+        Args:
+            db: 数据库会话
+            user_id: 用户ID
+            usage_type: 用途类型，对应 api_key_codes.description
+                       如果为空则从任意可用的key中分配
+
+        Returns:
+            分配成功返回包含 code 和 quota 的字典，失败返回 None
+        """
+        query = select(ApiKeyCode).where(ApiKeyCode.status == ApiKeyStatus.AVAILABLE)
+
+        if usage_type:
+            query = query.where(ApiKeyCode.description == usage_type)
+
         result = await db.execute(
-            select(ApiKeyCode)
-            .where(ApiKeyCode.status == ApiKeyStatus.AVAILABLE)
-            .limit(1)
-            .with_for_update()
+            query.limit(1).with_for_update()
         )
         api_key = result.scalar_one_or_none()
 
@@ -281,7 +318,11 @@ class ExchangeService:
         api_key.assigned_user_id = user_id
         api_key.assigned_at = datetime.now()
 
-        return api_key.code
+        return {
+            "code": api_key.code,
+            "quota": float(api_key.quota) if api_key.quota else 0,
+            "description": api_key.description
+        }
 
     @staticmethod
     async def get_exchange_history(

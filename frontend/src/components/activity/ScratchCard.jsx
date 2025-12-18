@@ -3,10 +3,199 @@
  * 使用 Canvas 实现刮刮乐效果
  */
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Ticket, Sparkles, Gift, RefreshCw, Coins, Star, AlertCircle } from 'lucide-react'
+import { Ticket, Sparkles, Gift, RefreshCw, Coins, Star, AlertCircle, Key, Heart, Coffee, Zap, Pizza, X, HelpCircle, Copy, CheckCircle } from 'lucide-react'
 import { lotteryApi } from '../../services'
 import { useToast } from '../Toast'
 import { trackLottery } from '../../utils/analytics'
+import GameHelpModal, { HelpButton } from './GameHelpModal'
+
+// 中奖庆祝弹窗组件
+function WinCelebrationModal({ prize, onClose, onPlayAgain, canPlayAgain }) {
+  const [copied, setCopied] = useState(false)
+
+  // 奖品图标映射
+  const getPrizeIcon = () => {
+    if (prize.prize_type === 'API_KEY') return Key
+    if (prize.prize_type === 'POINTS') return Coins
+    const itemType = prize.prize_value?.toLowerCase() || ''
+    if (itemType.includes('cheer') || itemType.includes('heart')) return Heart
+    if (itemType.includes('coffee')) return Coffee
+    if (itemType.includes('energy')) return Zap
+    if (itemType.includes('pizza')) return Pizza
+    if (itemType.includes('star')) return Star
+    return Gift
+  }
+
+  const Icon = getPrizeIcon()
+
+  // 复制兑换码到剪贴板
+  const handleCopyCode = async () => {
+    if (!prize.api_key_code) return
+    try {
+      await navigator.clipboard.writeText(prize.api_key_code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error('复制失败:', err)
+    }
+  }
+
+  // 播放音效
+  useEffect(() => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)()
+      const oscillator = audioContext.createOscillator()
+      const gainNode = audioContext.createGain()
+      oscillator.connect(gainNode)
+      gainNode.connect(audioContext.destination)
+
+      if (prize.is_rare) {
+        // 大奖音效
+        oscillator.frequency.value = 523
+        gainNode.gain.value = 0.25
+        oscillator.start()
+        setTimeout(() => oscillator.frequency.value = 659, 100)
+        setTimeout(() => oscillator.frequency.value = 784, 200)
+        setTimeout(() => oscillator.frequency.value = 1047, 300)
+        oscillator.stop(audioContext.currentTime + 0.6)
+      } else if (prize.prize_type !== 'EMPTY') {
+        // 普通奖励音效
+        oscillator.frequency.value = 523
+        gainNode.gain.value = 0.15
+        oscillator.start()
+        setTimeout(() => oscillator.frequency.value = 659, 100)
+        oscillator.stop(audioContext.currentTime + 0.3)
+      }
+    } catch (e) {
+      // 音频播放失败静默处理
+    }
+  }, [prize])
+
+  if (prize.prize_type === 'EMPTY') {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+        <div className="relative bg-gradient-to-br from-slate-700 to-slate-800 rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border border-slate-600/30 animate-[scaleIn_0.3s_ease-out]">
+          <div className="relative p-6 text-center">
+            <div className="w-20 h-20 mx-auto mb-4 bg-slate-600 rounded-full flex items-center justify-center">
+              <Gift className="w-10 h-10 text-slate-400" />
+            </div>
+            <h3 className="text-xl font-bold text-white mb-2">很遗憾</h3>
+            <p className="text-slate-400 mb-4">这张刮刮乐没有中奖</p>
+            <div className="flex gap-3">
+              <button onClick={onClose} className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+                好的
+              </button>
+              {canPlayAgain && (
+                <button onClick={onPlayAgain} className="flex-1 py-2.5 bg-gradient-to-r from-orange-500 to-red-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
+                  再来一张
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+        <style>{`@keyframes scaleIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }`}</style>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+      <div className={`relative bg-gradient-to-br ${prize.is_rare ? 'from-yellow-600 via-orange-600 to-red-600' : 'from-orange-800 via-red-800 to-pink-800'} rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden border ${prize.is_rare ? 'border-yellow-400/50' : 'border-orange-500/30'} animate-[scaleIn_0.3s_ease-out]`}>
+        {/* 装饰粒子 */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          {[...Array(20)].map((_, i) => (
+            <div
+              key={i}
+              className={`absolute w-2 h-2 ${prize.is_rare ? 'bg-yellow-300' : 'bg-orange-300'} rounded-full animate-ping`}
+              style={{
+                left: `${Math.random() * 100}%`,
+                top: `${Math.random() * 100}%`,
+                animationDelay: `${Math.random() * 2}s`,
+                animationDuration: `${1 + Math.random()}s`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="relative p-6 text-center">
+          {/* 关闭按钮 */}
+          <button onClick={onClose} className="absolute top-3 right-3 p-1.5 hover:bg-white/10 rounded-lg transition-colors">
+            <X className="w-5 h-5 text-white/70" />
+          </button>
+
+          {/* 奖励图标 */}
+          <div className="relative w-24 h-24 mx-auto mb-4">
+            <div className={`absolute inset-0 bg-gradient-to-br ${prize.is_rare ? 'from-yellow-400 to-orange-500' : 'from-orange-400 to-red-500'} rounded-full shadow-2xl ${prize.is_rare ? 'animate-pulse' : ''}`}>
+              <div className="absolute top-3 left-4 w-6 h-6 bg-white/30 rounded-full" />
+            </div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Icon className="w-12 h-12 text-white" />
+            </div>
+          </div>
+
+          <h3 className="text-2xl font-bold text-white mb-2">
+            {prize.is_rare ? '大奖来袭！' : '恭喜中奖！'}
+          </h3>
+
+          {/* 奖励展示 */}
+          <div className="bg-white/10 rounded-xl p-4 mb-4">
+            <div className={`text-2xl font-bold ${prize.is_rare ? 'text-yellow-300' : 'text-orange-200'}`}>
+              {prize.prize_name}
+            </div>
+            {prize.is_rare && (
+              <div className="flex items-center justify-center gap-1 mt-2 text-yellow-400">
+                <Star className="w-4 h-4" />
+                <span className="text-sm font-medium">稀有奖品</span>
+                <Star className="w-4 h-4" />
+              </div>
+            )}
+
+            {/* API Key 兑换码显示区 */}
+            {prize.prize_type === 'API_KEY' && prize.api_key_code && (
+              <div className="mt-3 p-3 bg-black/30 rounded-lg">
+                <p className="text-xs text-yellow-400/80 mb-2">兑换码（请妥善保存）</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-black/40 px-3 py-2 rounded text-sm text-yellow-300 font-mono break-all select-all">
+                    {prize.api_key_code}
+                  </code>
+                  <button
+                    onClick={handleCopyCode}
+                    className={`p-2 rounded-lg transition-all ${
+                      copied
+                        ? 'bg-green-500/30 text-green-300'
+                        : 'bg-yellow-500/20 text-yellow-300 hover:bg-yellow-500/30'
+                    }`}
+                    title={copied ? '已复制' : '复制兑换码'}
+                  >
+                    {copied ? <CheckCircle className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                  </button>
+                </div>
+                <p className="text-xs text-white/50 mt-2">可在背包中随时查看已获得的兑换码</p>
+              </div>
+            )}
+
+            <p className="text-orange-200 text-sm mt-2">奖励已发放到您的账户</p>
+          </div>
+
+          {/* 按钮 */}
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors">
+              好的
+            </button>
+            {canPlayAgain && (
+              <button onClick={onPlayAgain} className="flex-1 py-2.5 bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-medium rounded-lg hover:shadow-lg transition-all">
+                再来一张
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+      <style>{`@keyframes scaleIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }`}</style>
+    </div>
+  )
+}
 
 // 骨架屏
 function ScratchCardSkeleton() {
@@ -257,6 +446,8 @@ export default function ScratchCard({ onBalanceUpdate }) {
   const [buying, setBuying] = useState(false)
   const [currentCard, setCurrentCard] = useState(null)
   const [prize, setPrize] = useState(null)
+  const [showCelebration, setShowCelebration] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
 
   // 加载刮刮乐信息
   const loadScratchInfo = useCallback(async () => {
@@ -283,18 +474,30 @@ export default function ScratchCard({ onBalanceUpdate }) {
     setBuying(true)
     setPrize(null)
     try {
-      const result = await lotteryApi.buyScratchCard()
+      // 优先使用刮刮乐券
+      const hasTicket = (scratchInfo?.scratch_tickets || 0) > 0
+      const result = await lotteryApi.buyScratchCard(hasTicket)
       setCurrentCard({ id: result.card_id, revealed: false })
-      setScratchInfo((prev) => ({
-        ...prev,
-        today_count: (prev?.today_count || 0) + 1,
-        balance: result.remaining_balance,
-        can_draw: result.remaining_balance >= prev?.cost_points && (
-          prev?.daily_limit === null || (prev?.today_count || 0) + 1 < prev?.daily_limit
-        ),
-      }))
+      setScratchInfo((prev) => {
+        // 如果使用了券，扣减券数量
+        const newTickets = result.used_ticket ? Math.max(0, (prev?.scratch_tickets || 0) - 1) : prev?.scratch_tickets
+        const newTodayCount = (prev?.today_count || 0) + 1
+        return {
+          ...prev,
+          today_count: newTodayCount,
+          balance: result.remaining_balance,
+          scratch_tickets: newTickets,
+          can_draw: (newTickets > 0 || result.remaining_balance >= prev?.cost_points) && (
+            prev?.daily_limit === null || newTodayCount < prev?.daily_limit
+          ),
+        }
+      })
       onBalanceUpdate?.(result.remaining_balance)
-      toast.success('刮刮乐已购买，快来刮一刮！')
+      if (result.used_ticket) {
+        toast.success('使用刮刮乐券成功，快来刮一刮！')
+      } else {
+        toast.success('刮刮乐已购买，快来刮一刮！')
+      }
     } catch (err) {
       toast.error(err.response?.data?.detail || '购买失败')
     } finally {
@@ -309,19 +512,29 @@ export default function ScratchCard({ onBalanceUpdate }) {
       const result = await lotteryApi.revealScratchCard(currentCard.id)
       setPrize(result)
       setCurrentCard((prev) => ({ ...prev, revealed: true }))
-
-      if (result.is_rare) {
-        toast.success(`恭喜获得稀有奖品：${result.prize_name}`, {
-          title: '大奖来袭',
-          duration: 5000,
-        })
-      } else if (result.prize_type !== 'EMPTY') {
-        toast.success(`获得：${result.prize_name}`)
-      }
-      trackLottery('scratch', status?.cost || 30, result.prize_name)
+      // 显示庆祝弹窗
+      setShowCelebration(true)
+      trackLottery('scratch', scratchInfo?.cost_points || 30, result.prize_name)
     } catch (err) {
       toast.error(err.response?.data?.detail || '揭晓失败')
     }
+  }
+
+  // 关闭庆祝弹窗
+  const handleCloseCelebration = () => {
+    setShowCelebration(false)
+  }
+
+  // 再来一张（从弹窗触发）
+  const handlePlayAgainFromModal = () => {
+    setShowCelebration(false)
+    handleReset()
+    // 延迟一点再购买，让UI有时间更新
+    setTimeout(() => {
+      if (scratchInfo?.can_draw) {
+        handleBuy()
+      }
+    }, 100)
   }
 
   // 重新开始
@@ -384,15 +597,60 @@ export default function ScratchCard({ onBalanceUpdate }) {
           </div>
           <div>
             <h3 className="font-bold text-slate-900 dark:text-white">神秘刮刮乐</h3>
-            <p className="text-sm text-slate-500">{scratchInfo?.cost_points || 30}积分/张</p>
+            <p className="text-sm text-slate-500">
+              {(scratchInfo?.scratch_tickets || 0) > 0 ? (
+                <span className="text-green-600 dark:text-green-400">免费券×{scratchInfo.scratch_tickets}</span>
+              ) : (
+                <>{scratchInfo?.cost_points || 30}积分/张</>
+              )}
+            </p>
           </div>
         </div>
-        {scratchInfo?.daily_limit && (
-          <div className="text-sm text-slate-500">
-            今日: {scratchInfo?.today_count || 0}/{scratchInfo?.daily_limit}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {scratchInfo?.daily_limit && (
+            <div className="text-sm text-slate-500">
+              今日: {scratchInfo?.today_count || 0}/{scratchInfo?.daily_limit}
+            </div>
+          )}
+          <HelpButton onClick={() => setShowHelp(true)} />
+        </div>
       </div>
+
+      {/* 刮刮乐帮助弹窗 */}
+      <GameHelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} title="刮刮乐玩法">
+        <div className="space-y-4">
+          <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl">
+            <h4 className="font-bold text-orange-700 dark:text-orange-300 mb-2 flex items-center gap-2">
+              <Ticket className="w-4 h-4" /> 基本规则
+            </h4>
+            <ul className="text-sm text-orange-600 dark:text-orange-400 space-y-1">
+              <li>• 每张刮刮乐消耗 <span className="font-bold">{scratchInfo?.cost_points || 30}</span> 积分</li>
+              <li>• 每日限购 <span className="font-bold">{scratchInfo?.daily_limit || 5}</span> 张</li>
+              <li>• 点击"购买刮刮乐"按钮获得卡片</li>
+            </ul>
+          </div>
+          <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl">
+            <h4 className="font-bold text-yellow-700 dark:text-yellow-300 mb-2 flex items-center gap-2">
+              <Sparkles className="w-4 h-4" /> 操作方法
+            </h4>
+            <ul className="text-sm text-yellow-600 dark:text-yellow-400 space-y-1">
+              <li>• 用鼠标/手指在涂层上滑动刮开</li>
+              <li>• 刮开 <span className="font-bold">40%</span> 以上自动揭晓奖品</li>
+              <li>• 支持触屏和鼠标操作</li>
+            </ul>
+          </div>
+          <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-xl">
+            <h4 className="font-bold text-red-700 dark:text-red-300 mb-2 flex items-center gap-2">
+              <Key className="w-4 h-4" /> 奖品说明
+            </h4>
+            <ul className="text-sm text-red-600 dark:text-red-400 space-y-1">
+              <li>• 约5%概率获得神秘API Key兑换码</li>
+              <li>• 可获得积分奖励（10-50积分）</li>
+              <li>• 奖励抽中后即时发放到账户</li>
+            </ul>
+          </div>
+        </div>
+      </GameHelpModal>
 
       {/* 刮刮乐区域 */}
       {currentCard ? (
@@ -448,7 +706,12 @@ export default function ScratchCard({ onBalanceUpdate }) {
             {buying ? (
               <RefreshCw className="w-5 h-5 animate-spin mx-auto" />
             ) : !scratchInfo?.can_draw ? (
-              scratchInfo?.balance < scratchInfo?.cost_points ? '积分不足' : '今日次数已用完'
+              scratchInfo?.balance < scratchInfo?.cost_points && (scratchInfo?.scratch_tickets || 0) === 0 ? '积分不足' : '今日次数已用完'
+            ) : (scratchInfo?.scratch_tickets || 0) > 0 ? (
+              <span className="flex items-center justify-center gap-2">
+                <Ticket className="w-5 h-5" />
+                使用免费券
+              </span>
             ) : (
               <span className="flex items-center justify-center gap-2">
                 <Coins className="w-5 h-5" />
@@ -462,6 +725,16 @@ export default function ScratchCard({ onBalanceUpdate }) {
       <p className="text-center text-xs text-slate-400 mt-3">
         刮开涂层揭晓奖品，有机会获得神秘兑换码
       </p>
+
+      {/* 中奖庆祝弹窗 */}
+      {showCelebration && prize && (
+        <WinCelebrationModal
+          prize={prize}
+          onClose={handleCloseCelebration}
+          onPlayAgain={handlePlayAgainFromModal}
+          canPlayAgain={scratchInfo?.can_draw}
+        />
+      )}
     </div>
   )
 }

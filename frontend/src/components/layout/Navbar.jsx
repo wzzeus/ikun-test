@@ -83,7 +83,7 @@ const NAV_ITEMS = [
   { path: '/submissions', label: '作品展示' },
   { path: '/ranking', label: '排行榜' },
   { path: '/participants', label: '参赛选手' },
-  { path: '/activity', label: '活动中心', icon: Gift, highlight: true },
+  { path: '/activity', label: '疯狂娱乐城', icon: Gift, highlight: true },
 ]
 
 /**
@@ -393,7 +393,7 @@ function UserDropdown({ user, logout }) {
               </Link>
             </div>
           ) : (
-            /* 普通用户 - 活动中心 & 成就入口 */
+            /* 普通用户 - 娱乐城 & 任务入口 */
             <div className="p-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-2 gap-2">
               <Link
                 to="/activity"
@@ -401,15 +401,15 @@ function UserDropdown({ user, logout }) {
                 className="flex items-center justify-center space-x-2 px-3 py-3 text-sm font-bold text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
               >
                 <Gift className="w-4 h-4" />
-                <span>活动中心</span>
+                <span>疯狂娱乐城</span>
               </Link>
               <Link
-                to="/achievements"
+                to="/tasks"
                 onClick={() => setIsOpen(false)}
-                className="flex items-center justify-center space-x-2 px-3 py-3 text-sm font-bold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+                className="flex items-center justify-center space-x-2 px-3 py-3 text-sm font-bold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
               >
-                <Award className="w-4 h-4" />
-                <span>我的成就</span>
+                <Target className="w-4 h-4" />
+                <span>每日任务</span>
               </Link>
             </div>
           )}
@@ -626,15 +626,15 @@ export default function Navbar() {
                       className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-orange-500 dark:text-orange-400"
                     >
                       <Gift className="w-4 h-4" />
-                      活动中心
+                      疯狂娱乐城
                     </Link>
                     <Link
-                      to="/achievements"
+                      to="/tasks"
                       onClick={() => setIsMenuOpen(false)}
-                      className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-purple-500 dark:text-purple-400"
+                      className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-blue-500 dark:text-blue-400"
                     >
-                      <Award className="w-4 h-4" />
-                      我的成就
+                      <Target className="w-4 h-4" />
+                      每日任务
                     </Link>
                   </>
                 )}

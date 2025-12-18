@@ -8,6 +8,7 @@ import RankingPage from './pages/RankingPage'
 import ParticipantsPage from './pages/ParticipantsPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
+import RoleGuidePage from './pages/RoleGuidePage'
 import SubmitPage from './pages/SubmitPage'
 import AdminReviewPage from './pages/AdminReviewPage'
 import AdminDashboardPage from './pages/AdminDashboardPage'
@@ -18,6 +19,7 @@ import AchievementsPage from './pages/AchievementsPage'
 import ActivityCenterPage from './pages/ActivityCenterPage'
 import PredictionPage from './pages/PredictionPage'
 import MyBetsPage from './pages/MyBetsPage'
+import TasksPage from './pages/TasksPage'
 import { useAuthStore } from './stores/authStore'
 
 function App() {
@@ -25,12 +27,12 @@ function App() {
   const token = useAuthStore((s) => s.token)
   const refreshUser = useAuthStore((s) => s.refreshUser)
 
-  // 自动刷新用户信息：当已登录但缺少 role 字段时
+  // 自动刷新用户信息：当已登录时刷新一次以获取最新状态（包括 original_role）
   useEffect(() => {
-    if (token && user && !user.role) {
+    if (token && user) {
       refreshUser()
     }
-  }, [token, user, refreshUser])
+  }, []) // 只在首次加载时刷新
 
   return (
     <ToastProvider>
@@ -43,6 +45,7 @@ function App() {
           <Route path="submit" element={<SubmitPage />} />
           <Route path="achievements" element={<AchievementsPage />} />
           <Route path="activity" element={<ActivityCenterPage />} />
+          <Route path="tasks" element={<TasksPage />} />
           <Route path="prediction/:id" element={<PredictionPage />} />
           <Route path="my-bets" element={<MyBetsPage />} />
           <Route path="my-project" element={<ContestantCenterPage />} />
@@ -53,6 +56,7 @@ function App() {
         </Route>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/role-guide" element={<RoleGuidePage />} />
       </Routes>
     </ToastProvider>
   )

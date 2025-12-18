@@ -1,7 +1,7 @@
 """
 用户模型
 """
-from sqlalchemy import Column, String, Boolean, Enum as SQLEnum, Integer
+from sqlalchemy import Column, String, Boolean, Enum as SQLEnum, Integer, DateTime
 from sqlalchemy.orm import relationship
 import enum
 
@@ -49,6 +49,10 @@ class User(BaseModel):
     github_username = Column(String(100), nullable=True)
     github_avatar_url = Column(String(500), nullable=True)
     github_email = Column(String(255), nullable=True)
+
+    # 角色选择引导状态
+    role_selected = Column(Boolean, default=False, nullable=False)
+    role_selected_at = Column(DateTime, nullable=True)
 
     # Relationships
     achievements = relationship("UserAchievement", back_populates="user", lazy="dynamic")

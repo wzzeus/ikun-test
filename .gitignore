@@ -5,9 +5,12 @@ __pycache__/
 .venv/
 venv/
 
-# Environment
+# Environment (敏感信息，绝对不能上传！)
 .env
 .env.local
+.env.production
+.env.prod
+*.env
 
 # Build
 dist/
@@ -22,6 +25,7 @@ build/
 # Logs
 *.log
 logs/
+nginx/logs/
 
 # OS
 .DS_Store
@@ -31,3 +35,6 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# SSL certificates (敏感！)
+nginx/ssl/
