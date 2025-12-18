@@ -47,16 +47,14 @@ services:
     volumes:
       - ./backend:/app
 
-  # React 前端 (开发模式)
+  # React 前端 (生产模式 - Nginx 静态文件服务)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: chicken_king_frontend
     ports:
-      - "5174:5174"
-    environment:
-      - VITE_API_URL=http://localhost:8000/api/v1
+      - "5174:80"
 
   # Umami 统计分析
   umami:
