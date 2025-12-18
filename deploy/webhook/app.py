@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 def verify_signature(payload: bytes, signature: str) -> bool:
     """验证 GitHub Webhook 签名"""
     if not signature:
+        logger.warning(f'No signature provided')
         return False
 
     expected = 'sha256=' + hmac.new(
@@ -39,6 +40,10 @@ def verify_signature(payload: bytes, signature: str) -> bool:
         payload,
         hashlib.sha256
     ).hexdigest()
+
+    logger.info(f'Received signature: {signature[:20]}...')
+    logger.info(f'Expected signature: {expected[:20]}...')
+    logger.info(f'Secret length: {len(WEBHOOK_SECRET)}, starts with: {WEBHOOK_SECRET[:8]}...')
 
     return hmac.compare_digest(expected, signature)
 
