@@ -327,7 +327,7 @@ export default function EasterEggModal({ isOpen, onClose }) {
                 </p>
 
                 <a
-                  href={`${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/auth/linuxdo/login`}
+                  href={`${window.location.origin}/api/v1/auth/linuxdo/login`}
                   className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
                 >
                   <Sparkles className="w-5 h-5" />

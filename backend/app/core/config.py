@@ -33,6 +33,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5175",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://pk.ikuncode.cc",
     ]
 
     # 前端地址（OAuth 回跳用）
