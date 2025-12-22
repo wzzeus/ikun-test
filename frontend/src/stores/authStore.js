@@ -43,7 +43,7 @@ export const useAuthStore = create(
 
         try {
           const response = await fetch(
-            `${import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1'}/users/me`,
+            `${import.meta.env.VITE_API_URL || '/api/v1'}/users/me`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
