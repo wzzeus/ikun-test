@@ -183,10 +183,12 @@ run_migrations() {
     trap "flock -u $lock_fd; exec {lock_fd}>&-" EXIT
 
     # 检查是否需要执行基础 schema
-    local table_count
+    local table_count is_fresh_install
     table_count=$(db_query "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();" 2>/dev/null || echo "0")
+    is_fresh_install=false
 
     if [ "$table_count" = "0" ] || [ -z "$table_count" ]; then
+        is_fresh_install=true
         log_migration "数据库为空，执行基础 schema.sql..."
         if [ -f "$MIGRATIONS_DIR/schema.sql" ]; then
             if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/schema.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
@@ -203,6 +205,20 @@ run_migrations() {
     fi
 
     ensure_migrations_table
+
+    # 首次部署时导入配置数据
+    if [ "$is_fresh_install" = true ]; then
+        if [ -f "$MIGRATIONS_DIR/seed_production_config.sql" ]; then
+            log_migration "首次部署，导入配置数据..."
+            if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/seed_production_config.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
+                log_migration "✅ 配置数据导入成功"
+            else
+                log_migration "⚠️ 配置数据导入失败（非致命错误，详见 $MIGRATION_LOG_FILE）"
+            fi
+        else
+            log_migration "⚠️ 未找到配置数据文件 seed_production_config.sql"
+        fi
+    fi
 
     log_migration "========== 开始执行数据库迁移 =========="
     while IFS= read -r file; do
