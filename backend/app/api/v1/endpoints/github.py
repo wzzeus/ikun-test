@@ -292,7 +292,7 @@ async def get_github_leaderboard(
 async def sync_github_stats(
     registration_id: int,
     target_date: Optional[date] = Query(None, description="同步日期，默认今天"),
-    days: int = Query(1, ge=1, le=7, description="同步天数（1-7天）"),
+    days: int = Query(1, ge=1, le=90, description="同步天数（1-90天）"),
     db: AsyncSession = Depends(get_db),
 ):
     """手动同步 GitHub 数据"""

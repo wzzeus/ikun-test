@@ -206,6 +206,8 @@ async def create_registration(
             existing.description = payload.description
             existing.plan = payload.plan
             existing.tech_stack = payload.tech_stack
+            existing.repo_url = payload.repo_url
+            existing.api_key = payload.api_key
             existing.contact_email = str(payload.contact_email)
             existing.contact_wechat = payload.contact_wechat
             existing.contact_phone = payload.contact_phone
@@ -240,6 +242,7 @@ async def create_registration(
         plan=payload.plan,
         tech_stack=payload.tech_stack,
         repo_url=payload.repo_url,
+        api_key=payload.api_key,
         contact_email=str(payload.contact_email),
         contact_wechat=payload.contact_wechat,
         contact_phone=payload.contact_phone,

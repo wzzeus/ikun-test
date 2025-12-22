@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
 } from '@/components/ui/dialog'
 import * as VisuallyHidden from '@radix-ui/react-visually-hidden'
 import { Badge } from '@/components/ui/badge'
@@ -498,14 +499,14 @@ export default function ParticipantDetailModal({ participant, open, onClose, ini
       syncingRef.current = true
       setSyncing(true)
       try {
-        // 使用更长的超时时间（60秒），同步60天数据
-        await api.post(`/registrations/${participant.id}/github-sync?days=60`, null, {
-          timeout: 60000,
+        // 同步最近7天数据
+        await api.post(`/registrations/${participant.id}/github-sync?days=7`, null, {
+          timeout: 30000,
         })
-        // 重新获取最近2个月的数据
+        // 重新获取最近7天的数据
         const endDate = new Date()
         const startDate = new Date()
-        startDate.setMonth(startDate.getMonth() - 2)
+        startDate.setDate(startDate.getDate() - 6) // 最近7天
         const formatDate = (d) => d.toISOString().split('T')[0]
 
         const statsRes = await api.get(`/registrations/${participant.id}/github-stats`, {
@@ -683,8 +684,8 @@ export default function ParticipantDetailModal({ participant, open, onClose, ini
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-4xl max-h-[90vh] p-0 gap-0 overflow-hidden bg-zinc-50 dark:bg-zinc-950 flex flex-col" aria-describedby={undefined}>
         {/* 无障碍访问：隐藏的标题 */}
-        <VisuallyHidden.Root asChild>
-          <h2>{participant?.title || '选手详情'}</h2>
+        <VisuallyHidden.Root>
+          <DialogTitle>{participant?.title || '选手详情'}</DialogTitle>
         </VisuallyHidden.Root>
 
         {/* 头部 */}

@@ -95,9 +95,9 @@ class GitHubService:
         """
         params = {"per_page": per_page}
         if since:
-            params["since"] = since.isoformat()
+            params["since"] = since.isoformat() + "Z"  # GitHub API 需要 UTC 时区标识
         if until:
-            params["until"] = until.isoformat()
+            params["until"] = until.isoformat() + "Z"
 
         async with httpx.AsyncClient() as client:
             try:
@@ -152,7 +152,8 @@ class GitHubService:
                 "hourly_activity": {...}
             }
         """
-        # 构建时间范围（当天 00:00:00 到 23:59:59）
+        # 构建时间范围（当天 00:00:00 到 23:59:59 UTC）
+        # GitHub API 使用 UTC 时间，所以我们需要查询 UTC 日期范围
         since = datetime.combine(target_date, datetime.min.time())
         until = datetime.combine(target_date, datetime.max.time())
 

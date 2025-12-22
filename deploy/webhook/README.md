@@ -115,10 +115,19 @@ bash deploy/webhook/deploy.sh
 
 ## 功能特性
 
-### 自动数据库迁移
-- 部署时自动执行增量迁移（`backend/sql/NNN_*.sql`）
+### 自动数据库初始化与迁移
+
+#### 首次部署（数据库为空）
+自动导入 `backend/sql/production_clean_db.sql`，包含：
+- ✅ 50个表结构
+- ✅ 配置数据（比赛、成就、任务、抽奖、扭蛋、积分商城等）
+- ✅ 示例报名项目（API Key Tool）
+
+#### 增量迁移
+- 自动执行 `backend/sql/NNN_*.sql` 迁移文件
 - 版本跟踪，避免重复执行
 - 文件锁防止并发冲突
+- SHA256 校验确保文件完整性
 - 详细迁移日志：`logs/migrations.log`
 - 详见：[MIGRATIONS.md](./MIGRATIONS.md)
 

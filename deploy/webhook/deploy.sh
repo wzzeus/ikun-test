@@ -182,43 +182,51 @@ run_migrations() {
     # 确保退出时释放锁
     trap "flock -u $lock_fd; exec {lock_fd}>&-" EXIT
 
-    # 检查是否需要执行基础 schema
+    # 检查是否需要执行初始数据库导入
     local table_count is_fresh_install
     table_count=$(db_query "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();" 2>/dev/null || echo "0")
     is_fresh_install=false
 
     if [ "$table_count" = "0" ] || [ -z "$table_count" ]; then
         is_fresh_install=true
-        log_migration "数据库为空，执行基础 schema.sql..."
-        if [ -f "$MIGRATIONS_DIR/schema.sql" ]; then
+        log_migration "数据库为空，导入初始数据库（production_clean_db.sql）..."
+
+        # 优先使用 production_clean_db.sql（包含完整表结构 + 配置 + 示例数据）
+        if [ -f "$MIGRATIONS_DIR/production_clean_db.sql" ]; then
+            if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/production_clean_db.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
+                log_migration "✅ 初始数据库导入成功（包含表结构、配置数据、示例报名）"
+            else
+                log_migration "❌ 初始数据库导入失败（详见 $MIGRATION_LOG_FILE）"
+                return 1
+            fi
+        # 兼容旧方式：schema.sql + seed_production_config.sql
+        elif [ -f "$MIGRATIONS_DIR/schema.sql" ]; then
+            log_migration "⚠️ 未找到 production_clean_db.sql，使用旧方式 schema.sql..."
             if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/schema.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
                 log_migration "✅ 基础 schema 执行成功"
+
+                # 导入配置数据
+                if [ -f "$MIGRATIONS_DIR/seed_production_config.sql" ]; then
+                    log_migration "导入配置数据..."
+                    if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/seed_production_config.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
+                        log_migration "✅ 配置数据导入成功"
+                    else
+                        log_migration "⚠️ 配置数据导入失败（非致命错误）"
+                    fi
+                fi
             else
-                log_migration "❌ 基础 schema 执行失败（详见 $MIGRATION_LOG_FILE）"
+                log_migration "❌ 基础 schema 执行失败"
                 return 1
             fi
         else
-            log_migration "⚠️ 未找到 schema.sql 文件"
+            log_migration "❌ 未找到初始化文件（production_clean_db.sql 或 schema.sql）"
+            return 1
         fi
     else
-        log_migration "数据库已有 $table_count 个表，跳过 schema.sql"
+        log_migration "数据库已有 $table_count 个表，跳过初始化"
     fi
 
     ensure_migrations_table
-
-    # 首次部署时导入配置数据
-    if [ "$is_fresh_install" = true ]; then
-        if [ -f "$MIGRATIONS_DIR/seed_production_config.sql" ]; then
-            log_migration "首次部署，导入配置数据..."
-            if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/seed_production_config.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
-                log_migration "✅ 配置数据导入成功"
-            else
-                log_migration "⚠️ 配置数据导入失败（非致命错误，详见 $MIGRATION_LOG_FILE）"
-            fi
-        else
-            log_migration "⚠️ 未找到配置数据文件 seed_production_config.sql"
-        fi
-    fi
 
     log_migration "========== 开始执行数据库迁移 =========="
     while IFS= read -r file; do
