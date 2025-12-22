@@ -107,6 +107,19 @@ wait_for_db() {
     return 1
 }
 
+# 确保数据库存在
+ensure_database_exists() {
+    log_migration "确保数据库存在..."
+
+    # 使用 mysql 系统数据库连接，创建目标数据库
+    if docker exec "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql --protocol=tcp -h 127.0.0.1 -uroot -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"' >/dev/null 2>&1; then
+        log_migration "✅ 数据库已就绪: \$MYSQL_DATABASE"
+    else
+        log_migration "❌ 创建数据库失败"
+        return 1
+    fi
+}
+
 # 确保迁移记录表存在
 ensure_migrations_table() {
     log_migration "确保迁移记录表存在..."
@@ -155,7 +168,7 @@ run_migrations() {
     fi
 
     wait_for_db 30
-    ensure_migrations_table
+    ensure_database_exists
 
     # 获取文件锁，防止并发执行（使用 flock）
     log_migration "尝试获取迁移锁: $lock_file"
@@ -168,6 +181,28 @@ run_migrations() {
 
     # 确保退出时释放锁
     trap "flock -u $lock_fd; exec {lock_fd}>&-" EXIT
+
+    # 检查是否需要执行基础 schema
+    local table_count
+    table_count=$(db_query "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE();" 2>/dev/null || echo "0")
+
+    if [ "$table_count" = "0" ] || [ -z "$table_count" ]; then
+        log_migration "数据库为空，执行基础 schema.sql..."
+        if [ -f "$MIGRATIONS_DIR/schema.sql" ]; then
+            if docker exec -i "$DB_CONTAINER" sh -lc 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" exec mysql --protocol=tcp -h 127.0.0.1 -uroot "$MYSQL_DATABASE"' < "$MIGRATIONS_DIR/schema.sql" >> "$MIGRATION_LOG_FILE" 2>&1; then
+                log_migration "✅ 基础 schema 执行成功"
+            else
+                log_migration "❌ 基础 schema 执行失败（详见 $MIGRATION_LOG_FILE）"
+                return 1
+            fi
+        else
+            log_migration "⚠️ 未找到 schema.sql 文件"
+        fi
+    else
+        log_migration "数据库已有 $table_count 个表，跳过 schema.sql"
+    fi
+
+    ensure_migrations_table
 
     log_migration "========== 开始执行数据库迁移 =========="
     while IFS= read -r file; do
