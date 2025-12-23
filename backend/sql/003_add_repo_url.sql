@@ -4,9 +4,9 @@
 
 USE `chicken_king`;
 
--- 添加 repo_url 字段到 registrations 表
+-- 添加 repo_url 字段到 registrations 表（幂等性：如果字段已存在则跳过）
 ALTER TABLE `registrations`
-ADD COLUMN `repo_url` VARCHAR(500) NULL COMMENT 'GitHub 仓库地址' AFTER `tech_stack`;
+ADD COLUMN IF NOT EXISTS `repo_url` VARCHAR(500) NULL COMMENT 'GitHub 仓库地址' AFTER `tech_stack`;
 
 -- 为现有模拟数据添加仓库地址
 UPDATE `registrations` SET `repo_url` = 'https://github.com/langgenius/dify' WHERE `id` = 3;

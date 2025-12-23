@@ -32,23 +32,23 @@ ALTER TABLE `submissions`
 
 -- 2.1 关联报名记录（可选，便于追溯）
 ALTER TABLE `submissions`
-  ADD COLUMN `registration_id` INT NULL COMMENT '关联报名ID（可选）' AFTER `contest_id`;
+  ADD COLUMN IF NOT EXISTS `registration_id` INT NULL COMMENT '关联报名ID（可选）' AFTER `contest_id`;
 
 -- 2.2 项目文档（Markdown 格式，必填）
 ALTER TABLE `submissions`
-  ADD COLUMN `project_doc_md` LONGTEXT NULL COMMENT '项目文档（Markdown格式，包含安装步骤、使用说明、技术架构）' AFTER `video_url`;
+  ADD COLUMN IF NOT EXISTS `project_doc_md` LONGTEXT NULL COMMENT '项目文档（Markdown格式，包含安装步骤、使用说明、技术架构）' AFTER `video_url`;
 
 -- 2.3 校验相关字段
 ALTER TABLE `submissions`
-  ADD COLUMN `validation_summary` JSON NULL COMMENT '最近一次校验结果摘要（JSON）' AFTER `project_doc_md`,
-  ADD COLUMN `validated_at` DATETIME NULL COMMENT '最近一次校验时间' AFTER `validation_summary`,
-  ADD COLUMN `submitted_at` DATETIME NULL COMMENT '最终提交时间' AFTER `validated_at`;
+  ADD COLUMN IF NOT EXISTS `validation_summary` JSON NULL COMMENT '最近一次校验结果摘要（JSON）' AFTER `project_doc_md`,
+  ADD COLUMN IF NOT EXISTS `validated_at` DATETIME NULL COMMENT '最近一次校验时间' AFTER `validation_summary`,
+  ADD COLUMN IF NOT EXISTS `submitted_at` DATETIME NULL COMMENT '最终提交时间' AFTER `validated_at`;
 
 -- 2.4 审核相关字段
 ALTER TABLE `submissions`
-  ADD COLUMN `reviewer_id` INT NULL COMMENT '审核人ID' AFTER `vote_count`,
-  ADD COLUMN `review_comment` TEXT NULL COMMENT '审核意见' AFTER `reviewer_id`,
-  ADD COLUMN `reviewed_at` DATETIME NULL COMMENT '审核时间' AFTER `review_comment`;
+  ADD COLUMN IF NOT EXISTS `reviewer_id` INT NULL COMMENT '审核人ID' AFTER `vote_count`,
+  ADD COLUMN IF NOT EXISTS `review_comment` TEXT NULL COMMENT '审核意见' AFTER `reviewer_id`,
+  ADD COLUMN IF NOT EXISTS `reviewed_at` DATETIME NULL COMMENT '审核时间' AFTER `review_comment`;
 
 -- ============================================================================
 -- 3. 回填 registration_id（若存在对应报名记录）
