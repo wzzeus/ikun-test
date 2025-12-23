@@ -191,6 +191,36 @@ fi
 
 **提交**: `c884914` - fix: 修复部署脚本自动重载机制（使用 git log 而非文件校验和）
 
+### MySQL 连接失败 - TCP vs Unix Socket (2025-12-23 12:20)
+
+**问题**: 数据库迁移失败，报错 `ERROR 1045 (28000): Access denied for user 'root'@'127.0.0.1'`。
+
+**根本原因**:
+1. 脚本使用 `--protocol=tcp -h 127.0.0.1` 强制 TCP 连接
+2. MySQL 用户表中存在 `root@localhost` 和 `root@%`，但**没有** `root@127.0.0.1`
+3. MySQL 将 `localhost` (Unix socket) 和 `127.0.0.1` (TCP) 视为不同的主机
+4. TCP 连接被拒绝，导致所有数据库操作失败
+
+**错误的连接方式**:
+```bash
+# ❌ 强制使用 TCP，但 root@127.0.0.1 不存在
+mysql --protocol=tcp -h 127.0.0.1 -uroot
+# ERROR 1045: Access denied
+```
+
+**正确的连接方式**:
+```bash
+# ✅ 使用默认 Unix socket，连接到 root@localhost
+mysql -uroot
+# 或
+mysql -h localhost -uroot
+```
+
+**修复**:
+移除所有 MySQL 命令中的 `--protocol=tcp -h 127.0.0.1` 参数，使用默认的 Unix socket 连接。
+
+**提交**: `22c41c1` - fix: 修复 MySQL 连接问题（使用 Unix socket 而非 TCP）
+
 ## 行动清单
 
 - [x] 分析攻击原因
@@ -198,7 +228,9 @@ fi
 - [x] 推送到 GitHub
 - [x] 发现并修复部署脚本 heredoc 语法问题
 - [x] 发现并修复脚本自动重载失败问题（Docker 卷挂载同步）
-- [ ] 等待下次自动部署验证所有修复
+- [x] 发现并修复 MySQL 连接失败问题（TCP vs Unix Socket）
+- [x] 验证快速重启生效（部署时间从 5 分钟降至 3 秒）
+- [ ] 等待下次自动部署验证脚本自动重载机制
 - [ ] 服务器删除被污染数据卷
 - [ ] 服务器重新部署安全配置
 - [ ] 服务器导入干净数据
