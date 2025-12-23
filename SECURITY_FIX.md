@@ -123,15 +123,52 @@ docker restart chicken_king_backend
 - **2025-12-23 10:35** - 推送安全修复到 GitHub
 - **待执行** - 服务器端恢复数据库
 
+## 额外发现的问题
+
+### 部署脚本 Heredoc 语法错误 (2025-12-23 11:20)
+
+**问题**: deploy.sh 使用 `<< ENVEOF` 生成 .env 文件时,如果密码包含特殊字符(`%`, `*`, `=`, `-`),bash 会将其当作通配符或操作符解析,导致语法错误。脚本会在"生成生产环境配置"步骤后静默失败,不会执行后续的容器重启和数据库迁移。
+
+**症状**:
+- 部署日志停在 `[2025-12-23 03:30:50] 启动容器...`
+- 没有"重启容器以应用最新代码"日志
+- 没有"执行数据库迁移"日志
+- 强密码被重置为 `password`
+
+**根本原因**:
+```bash
+# 错误的写法 - bash 会解析特殊字符
+cat > .env << ENVEOF
+MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD  # 如果密码是 pj72-i4sQ-nA%bGD=svmZ*c9tA7%
+ENVEOF                                     # bash 会尝试解析 %, *, = 等特殊字符
+```
+
+**修复方法**:
+1. 使用带引号的 heredoc (`<< 'ENVEOF'`) 防止变量展开
+2. 用占位符 `__MYSQL_ROOT_PASSWORD__` 在模板中
+3. 使用 `sed` 安全替换密码,使用 `@` 作为分隔符避免冲突
+
+```bash
+# 正确的写法
+cat > .env << 'ENVEOF'
+MYSQL_ROOT_PASSWORD=__MYSQL_ROOT_PASSWORD__
+ENVEOF
+sed -i.bak "s@__MYSQL_ROOT_PASSWORD__@${MYSQL_ROOT_PASSWORD}@g" .env
+```
+
+**提交**: `cdf26c9` - fix: 修复部署脚本密码特殊字符处理问题
+
 ## 行动清单
 
 - [x] 分析攻击原因
 - [x] 修复 docker-compose.yml 安全问题
 - [x] 推送到 GitHub
+- [x] 发现并修复部署脚本 heredoc 语法问题
+- [ ] 等待下次自动部署验证修复
 - [ ] 服务器删除被污染数据卷
 - [ ] 服务器重新部署安全配置
 - [ ] 服务器导入干净数据
-- [ ] 修改所有数据库密码
+- [ ] 修改所有数据库密码为强密码
 - [ ] 配置防火墙
 - [ ] 设置定期备份
 - [ ] 安装入侵检测系统
