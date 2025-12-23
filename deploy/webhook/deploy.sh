@@ -316,8 +316,16 @@ cd "$PROJECT_DIR"
 
 # 1. 拉取最新代码
 log "拉取最新代码..."
+SCRIPT_CHECKSUM_BEFORE=$(md5sum "$0" 2>/dev/null || echo "none")
 git fetch origin main
 git reset --hard origin/main
+
+# 检查脚本是否被更新,如果是则重新执行
+SCRIPT_CHECKSUM_AFTER=$(md5sum "$0" 2>/dev/null || echo "none")
+if [ "$SCRIPT_CHECKSUM_BEFORE" != "$SCRIPT_CHECKSUM_AFTER" ]; then
+    log "⚠️  部署脚本已更新,重新执行..."
+    exec bash "$0" "$@"
+fi
 
 # 2. 生成生产环境配置
 log "生成生产环境配置..."
