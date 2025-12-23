@@ -285,8 +285,10 @@ run_migrations() {
 
     # 清除 trap 并释放锁
     trap - EXIT
-    flock -u "$lock_fd"
-    exec {lock_fd}>&-
+    if [ -n "${lock_fd:-}" ]; then
+        flock -u "$lock_fd" 2>/dev/null || true
+        exec {lock_fd}>&- 2>/dev/null || true
+    fi
 }
 
 # 检查必要的依赖命令
