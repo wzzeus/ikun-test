@@ -74,6 +74,7 @@ services:
       - DATABASE_URL=mysql+aiomysql://${MYSQL_USER:-chicken}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE:-chicken_king}
       - REDIS_URL=redis://redis:6379/0
       - FRONTEND_URL=${FRONTEND_URL}
+      - MEDIA_ROOT=${MEDIA_ROOT:-/app/app/uploads/media}
       - WORKER_API_TOKEN=${WORKER_API_TOKEN}
       - PROJECT_DOMAIN_SUFFIX=${PROJECT_DOMAIN_SUFFIX:-local}
       - PROJECT_DOMAIN_TEMPLATE=${PROJECT_DOMAIN_TEMPLATE:-project-{submission_id}.{suffix}}
@@ -93,6 +94,9 @@ services:
     # 内部网络，不直接暴露
     expose:
       - "8000"
+    # 持久化上传媒体目录
+    volumes:
+      - media_data:/app/app/uploads
 
   # ==========================================================================
   # Worker 服务（部署流程）
@@ -255,4 +259,6 @@ volumes:
   redis_data:
     driver: local
   umami_db_data:
+    driver: local
+  media_data:
     driver: local

@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # 前端地址（OAuth 回跳用）
     FRONTEND_URL: str = "http://127.0.0.1:5173"
 
+    # 媒体文件存储
+    MEDIA_ROOT: str = "/app/app/uploads/media"
+
     # GitHub API（用于提高 API 限额，可选）
     GITHUB_TOKEN: Optional[str] = None
 

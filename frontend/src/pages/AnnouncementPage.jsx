@@ -3,8 +3,7 @@ import { Link } from 'react-router-dom'
 import { Award, Trophy, Star } from 'lucide-react'
 import { contestApi } from '../services'
 import { cn } from '@/lib/utils'
-
-const CONTEST_ID = 1
+import { useContestId } from '@/hooks/useContestId'
 
 const PHASE_LABELS = {
   upcoming: '即将开始',
@@ -47,14 +46,15 @@ export default function AnnouncementPage() {
   const [error, setError] = useState('')
   const [contest, setContest] = useState(null)
   const [ranking, setRanking] = useState({ items: [], total: 0 })
+  const { contestId } = useContestId()
 
   const loadData = async () => {
     setLoading(true)
     setError('')
     try {
       const [contestRes, rankingRes] = await Promise.all([
-        contestApi.get(CONTEST_ID),
-        contestApi.getRanking(CONTEST_ID, { limit: 50 }),
+        contestApi.get(contestId),
+        contestApi.getRanking(contestId, { limit: 50 }),
       ])
       setContest(contestRes)
       setRanking(rankingRes || { items: [], total: 0 })
@@ -67,7 +67,7 @@ export default function AnnouncementPage() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [contestId])
 
   const top3 = useMemo(() => ranking.items.slice(0, 3), [ranking.items])
 

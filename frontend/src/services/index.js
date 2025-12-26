@@ -16,6 +16,13 @@ export const userApi = {
   getMe: () => api.get('/users/me'),
   updateMe: (data) => api.put('/users/me', data),
   getUser: (id) => api.get(`/users/${id}`),
+  uploadAvatar: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post('/users/me/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   // 角色选择（新用户引导）
   selectRole: (role) => api.post('/users/me/select-role', { role }),
 }
@@ -26,10 +33,19 @@ export const userApi = {
 export const contestApi = {
   list: () => api.get('/contests'),
   get: (id) => api.get(`/contests/${id}`),
+  getStats: (id) => api.get(`/contests/${id}/stats`),
+  getCurrent: (params) => api.get('/contests/current', { params }),
   signup: (id) => api.post(`/contests/${id}/signup`),
   getRanking: (id, params) => api.get(`/contests/${id}/ranking`, { params }),
   getRankingDetail: (id, projectId) => api.get(`/contests/${id}/ranking/${projectId}`),
   getInteractionLeaderboard: (id, params) => api.get(`/contests/${id}/interaction-leaderboard`, { params }),
+  uploadBanner: (contestId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/contests/${contestId}/banner`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
 }
 
 /**
@@ -39,6 +55,23 @@ export const projectApi = {
   list: (params) => api.get('/projects', { params }),
   create: (data) => api.post('/projects', data),
   update: (projectId, data) => api.patch(`/projects/${projectId}`, data),
+  uploadCover: (projectId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/projects/${projectId}/cover`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  deleteCover: (projectId) => api.delete(`/projects/${projectId}/cover`),
+  uploadScreenshot: (projectId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return api.post(`/projects/${projectId}/screenshots`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  deleteScreenshot: (projectId, url) =>
+    api.delete(`/projects/${projectId}/screenshots`, { params: { url } }),
   submitImage: (projectId, data) => api.post(`/projects/${projectId}/submissions`, data),
   listSubmissions: (projectId, params) => api.get(`/projects/${projectId}/submissions`, { params }),
   getCurrentSubmission: (projectId) => api.get(`/projects/${projectId}/submissions/current`),

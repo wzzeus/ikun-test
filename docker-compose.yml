@@ -43,6 +43,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
       - FRONTEND_URL=${FRONTEND_URL:-http://127.0.0.1:5173}
+      - MEDIA_ROOT=${MEDIA_ROOT:-/app/app/uploads/media}
       - WORKER_API_TOKEN=${WORKER_API_TOKEN:-dev-worker-token}
       - PROJECT_DOMAIN_SUFFIX=${PROJECT_DOMAIN_SUFFIX:-local}
       - PROJECT_DOMAIN_TEMPLATE=${PROJECT_DOMAIN_TEMPLATE:-project-{submission_id}.{suffix}}

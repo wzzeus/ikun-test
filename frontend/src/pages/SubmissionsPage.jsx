@@ -3,16 +3,15 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ExternalLink, Github, Eye, Search, User2, ThumbsUp, Bookmark, FileText } from 'lucide-react'
+import { ExternalLink, Github, Eye, Search, User2, ThumbsUp, Bookmark, FileText, Star } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useToast } from '@/components/Toast'
 import { cn } from '@/lib/utils'
-import { projectApi } from '../services'
+import { contestApi, projectApi, submissionApi, voteApi } from '../services'
 import { useAuthStore } from '../stores/authStore'
-
-const CONTEST_ID = 1
+import { useContestId } from '@/hooks/useContestId'
 
 const STATUS_CONFIG = {
   online: { label: '已上线', variant: 'success' },
@@ -25,6 +24,7 @@ function normalizeUrl(url) {
   if (!url) return ''
   if (url.startsWith('http://') || url.startsWith('https://')) return url
   if (url.startsWith('//')) return url
+  if (url.startsWith('/')) return url
   return `https://${url}`
 }
 
@@ -38,17 +38,21 @@ export default function SubmissionsPage() {
   const toast = useToast()
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const { contestId } = useContestId()
+  const [contest, setContest] = useState(null)
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [actioning, setActioning] = useState({})
+  const [submissions, setSubmissions] = useState([])
+  const [myVoteIds, setMyVoteIds] = useState([])
 
   const fetchProjects = async () => {
     try {
       setLoading(true)
       setError('')
-      const res = await projectApi.list({ contest_id: CONTEST_ID })
+      const res = await projectApi.list({ contest_id: contestId })
       setProjects(res?.items || [])
     } catch (err) {
       setError(err?.response?.data?.detail || '加载作品失败')
@@ -59,7 +63,101 @@ export default function SubmissionsPage() {
 
   useEffect(() => {
     fetchProjects()
-  }, [])
+  }, [contestId])
+
+  useEffect(() => {
+    let active = true
+    const loadContest = async () => {
+      try {
+        const data = await contestApi.get(contestId)
+        if (active) {
+          setContest(data)
+        }
+      } catch (err) {
+        if (active) {
+          setContest(null)
+        }
+      }
+    }
+    if (contestId) {
+      loadContest()
+    }
+    return () => {
+      active = false
+    }
+  }, [contestId])
+
+  useEffect(() => {
+    let active = true
+    const loadSubmissions = async () => {
+      if (!contestId) return
+      try {
+        const res = await submissionApi.list({ contest_id: contestId, page: 1, page_size: 100 })
+        if (active) {
+          setSubmissions(res?.items || [])
+        }
+      } catch (err) {
+        if (active) {
+          setSubmissions([])
+        }
+      }
+    }
+    loadSubmissions()
+    return () => {
+      active = false
+    }
+  }, [contestId])
+
+  useEffect(() => {
+    let active = true
+    const loadMyVotes = async () => {
+      if (!user) {
+        if (active) {
+          setMyVoteIds([])
+        }
+        return
+      }
+      try {
+        const res = await voteApi.getMyVotes()
+        if (active) {
+          setMyVoteIds((res?.items || []).map((item) => item.submission_id))
+        }
+      } catch (err) {
+        if (active) {
+          setMyVoteIds([])
+        }
+      }
+    }
+    loadMyVotes()
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  const canVote = contest?.phase === 'voting'
+  const myVoteSet = useMemo(() => new Set(myVoteIds), [myVoteIds])
+  const submissionByUser = useMemo(() => {
+    const map = new Map()
+    submissions.forEach((item) => {
+      if (!item?.user_id) return
+      if (!map.has(item.user_id)) {
+        map.set(item.user_id, item)
+      }
+    })
+    return map
+  }, [submissions])
+
+  const updateSubmissionVote = (submissionId, data) => {
+    setSubmissions((prev) =>
+      prev.map((item) => {
+        if (item.id !== submissionId) return item
+        return {
+          ...item,
+          vote_count: data?.vote_count ?? item.vote_count ?? 0,
+        }
+      })
+    )
+  }
 
   const updateProjectInteraction = (projectId, data) => {
     setProjects((prev) =>
@@ -122,6 +220,44 @@ export default function SubmissionsPage() {
       toast.error(err?.response?.data?.detail || '收藏操作失败')
     } finally {
       setActioningFlag(project.id, 'favorite', false)
+    }
+  }
+
+  const toggleVote = async (project, submission) => {
+    if (!submission) {
+      toast.warning('暂无可投票作品')
+      return
+    }
+    if (!ensureLogin()) return
+    if (!canVote) {
+      toast.warning('当前不在投票期')
+      return
+    }
+    if (submission.user_id === user?.id) {
+      toast.warning('不能给自己的作品投票')
+      return
+    }
+    if (actioning[project.id]?.vote) return
+    setActioningFlag(project.id, 'vote', true)
+    const alreadyVoted = myVoteSet.has(submission.id)
+    try {
+      const res = alreadyVoted
+        ? await voteApi.cancel(submission.id)
+        : await voteApi.vote(submission.id)
+      updateSubmissionVote(submission.id, res)
+      setMyVoteIds((prev) => {
+        const next = new Set(prev)
+        if (res?.voted) {
+          next.add(submission.id)
+        } else {
+          next.delete(submission.id)
+        }
+        return Array.from(next)
+      })
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || (alreadyVoted ? '取消投票失败' : '投票失败'))
+    } finally {
+      setActioningFlag(project.id, 'vote', false)
     }
   }
 
@@ -188,6 +324,16 @@ export default function SubmissionsPage() {
               const status = STATUS_CONFIG[project.status] || STATUS_CONFIG.offline
               const ownerName = project.owner?.display_name || project.owner?.username || '匿名作者'
               const coverUrl = resolveCoverUrl(project)
+              const submission = submissionByUser.get(project.user_id)
+              const voted = submission ? myVoteSet.has(submission.id) : false
+              const isOwner = submission?.user_id === user?.id
+              const voteDisabledReason = !submission
+                ? '暂无可投票作品'
+                : !canVote
+                  ? '当前不在投票期'
+                  : isOwner
+                    ? '不能给自己的作品投票'
+                    : null
               return (
                 <div
                   key={project.id}
@@ -286,6 +432,23 @@ export default function SubmissionsPage() {
                     >
                       <Bookmark className="w-3.5 h-3.5" />
                       <span>{project.favorite_count ?? 0}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleVote(project, submission)}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-2 py-1 transition',
+                        voted
+                          ? 'border-emerald-500/40 text-emerald-600 bg-emerald-500/10'
+                          : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40',
+                        (voteDisabledReason || actioning[project.id]?.vote) && 'opacity-60 cursor-not-allowed'
+                      )}
+                      title={voteDisabledReason || (voted ? '取消投票' : '投票')}
+                      disabled={Boolean(voteDisabledReason) || actioning[project.id]?.vote}
+                    >
+                      <Star className="w-3.5 h-3.5" />
+                      <span>{voted ? '已投票' : '投票'}</span>
+                      <span>{submission?.vote_count ?? 0}</span>
                     </button>
                   </div>
 

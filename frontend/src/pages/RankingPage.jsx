@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Crown, Trophy, Heart, Coffee, Zap, Pizza, Star, GitCommit, Flame, Sparkles, ThumbsUp, Code2, Clock, Target, Bookmark } from 'lucide-react'
 import api from '../services/api'
+import { contestApi, submissionApi, voteApi } from '../services'
+import { useAuthStore } from '../stores/authStore'
+import { useToast } from '@/components/Toast'
 import { cn } from '@/lib/utils'
-
-const CONTEST_ID = 1
+import { useContestId } from '@/hooks/useContestId'
+import { resolveAvatarUrl } from '@/utils/avatar'
 
 const TABS = [
   { key: 'cheer', label: '人气排行榜', icon: Heart },
@@ -54,9 +57,7 @@ const CHEER_TYPES = [
 ]
 
 function Avatar({ user, size = 44 }) {
-  const url =
-    user?.avatar_url ||
-    `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.display_name || user?.username || 'U')}&background=random`
+  const url = resolveAvatarUrl(user?.avatar_url)
   return (
     <img
       src={url}
@@ -277,7 +278,7 @@ function TopCard({ entry, rank, mode }) {
   )
 }
 
-function Row({ entry, mode }) {
+function Row({ entry, mode, voteState, onVote }) {
   // 根据模式获取显示值和标签
   let value, metricLabel, subValue, showTitle = true
   if (mode === 'cheer') {
@@ -437,6 +438,25 @@ function Row({ entry, mode }) {
             查看详情
           </Link>
         )}
+        {mode === 'review' && voteState && (
+          <button
+            type="button"
+            onClick={() => onVote(voteState.submission)}
+            className={cn(
+              'mt-2 inline-flex items-center justify-end gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-full border transition',
+              voteState.voted
+                ? 'border-emerald-500/40 text-emerald-600 bg-emerald-500/10'
+                : 'border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300 hover:text-emerald-600 dark:hover:text-emerald-400 hover:border-emerald-500/40',
+              voteState.disabled && 'opacity-60 cursor-not-allowed'
+            )}
+            disabled={voteState.disabled}
+            title={voteState.disabledReason || (voteState.voted ? '取消投票' : '投票')}
+          >
+            <Star className="w-3.5 h-3.5" />
+            <span>{voteState.voted ? '已投票' : '投票'}</span>
+            <span>{voteState.voteCount ?? 0}</span>
+          </button>
+        )}
       </div>
     </div>
   )
@@ -450,6 +470,27 @@ export default function RankingPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [data, setData] = useState({ items: [], total: 0 })
+  const { contestId } = useContestId()
+  const navigate = useNavigate()
+  const toast = useToast()
+  const user = useAuthStore((s) => s.user)
+  const [contest, setContest] = useState(null)
+  const [submissions, setSubmissions] = useState([])
+  const [myVoteIds, setMyVoteIds] = useState([])
+  const [voteLoading, setVoteLoading] = useState({})
+
+  const canVote = contest?.phase === 'voting'
+  const myVoteSet = useMemo(() => new Set(myVoteIds), [myVoteIds])
+  const submissionByUser = useMemo(() => {
+    const map = new Map()
+    submissions.forEach((item) => {
+      if (!item?.user_id) return
+      if (!map.has(item.user_id)) {
+        map.set(item.user_id, item)
+      }
+    })
+    return map
+  }, [submissions])
 
   // 用于防止竞态条件
   const requestIdRef = useRef(0)
@@ -476,23 +517,23 @@ export default function RankingPage() {
     try {
       let res
       if (tab === 'cheer') {
-        res = await api.get(`/contests/${CONTEST_ID}/cheer-leaderboard`, { params: { limit: 50 } })
+        res = await api.get(`/contests/${contestId}/cheer-leaderboard`, { params: { limit: 50 } })
       } else if (tab === 'like') {
-        res = await api.get(`/contests/${CONTEST_ID}/interaction-leaderboard`, { params: { type: 'like', limit: 50 } })
+        res = await api.get(`/contests/${contestId}/interaction-leaderboard`, { params: { type: 'like', limit: 50 } })
       } else if (tab === 'favorite') {
-        res = await api.get(`/contests/${CONTEST_ID}/interaction-leaderboard`, { params: { type: 'favorite', limit: 50 } })
+        res = await api.get(`/contests/${contestId}/interaction-leaderboard`, { params: { type: 'favorite', limit: 50 } })
       } else if (tab === 'github') {
-        res = await api.get(`/contests/${CONTEST_ID}/github-leaderboard`, {
+        res = await api.get(`/contests/${contestId}/github-leaderboard`, {
           params: { leaderboard_type: 'commits', limit: 50 },
         })
       } else if (tab === 'quota') {
-        res = await api.get(`/contests/${CONTEST_ID}/quota-leaderboard`, { params: { limit: 50 } })
+        res = await api.get(`/contests/${contestId}/quota-leaderboard`, { params: { limit: 50 } })
       } else if (tab === 'lucky') {
         res = await api.get('/lottery/leaderboard', { params: { limit: 50 } })
       } else if (tab === 'heat') {
-        res = await api.get('/votes/leaderboard', { params: { contest_id: CONTEST_ID, limit: 50 } })
+        res = await api.get('/votes/leaderboard', { params: { contest_id: contestId, limit: 50 } })
       } else if (tab === 'review') {
-        res = await api.get(`/contests/${CONTEST_ID}/ranking`, { params: { limit: 50 } })
+        res = await api.get(`/contests/${contestId}/ranking`, { params: { limit: 50 } })
       } else if (tab === 'puzzle') {
         res = await api.get('/puzzle/leaderboard', { params: { limit: 50 } })
       }
@@ -513,11 +554,171 @@ export default function RankingPage() {
         setLoading(false)
       }
     }
-  }, [])
+  }, [contestId])
 
   useEffect(() => {
     fetchLeaderboard(activeTab)
   }, [activeTab, fetchLeaderboard])
+
+  useEffect(() => {
+    let active = true
+    const loadContest = async () => {
+      try {
+        const data = await contestApi.get(contestId)
+        if (active) {
+          setContest(data)
+        }
+      } catch (err) {
+        if (active) {
+          setContest(null)
+        }
+      }
+    }
+    if (contestId) {
+      loadContest()
+    }
+    return () => {
+      active = false
+    }
+  }, [contestId])
+
+  useEffect(() => {
+    let active = true
+    const loadSubmissions = async () => {
+      if (!contestId) return
+      try {
+        const res = await submissionApi.list({ contest_id: contestId, page: 1, page_size: 100 })
+        if (active) {
+          setSubmissions(res?.items || [])
+        }
+      } catch (err) {
+        if (active) {
+          setSubmissions([])
+        }
+      }
+    }
+    loadSubmissions()
+    return () => {
+      active = false
+    }
+  }, [contestId])
+
+  useEffect(() => {
+    let active = true
+    const loadMyVotes = async () => {
+      if (!user) {
+        if (active) {
+          setMyVoteIds([])
+        }
+        return
+      }
+      try {
+        const res = await voteApi.getMyVotes()
+        if (active) {
+          setMyVoteIds((res?.items || []).map((item) => item.submission_id))
+        }
+      } catch (err) {
+        if (active) {
+          setMyVoteIds([])
+        }
+      }
+    }
+    loadMyVotes()
+    return () => {
+      active = false
+    }
+  }, [user])
+
+  const ensureLogin = () => {
+    if (user) return true
+    toast.warning('请先登录后再操作')
+    navigate('/login')
+    return false
+  }
+
+  const updateSubmissionVote = (submissionId, data) => {
+    setSubmissions((prev) =>
+      prev.map((item) => {
+        if (item.id !== submissionId) return item
+        return {
+          ...item,
+          vote_count: data?.vote_count ?? item.vote_count ?? 0,
+        }
+      })
+    )
+  }
+
+  const handleVote = async (submission) => {
+    if (!submission) {
+      toast.warning('暂无可投票作品')
+      return
+    }
+    if (!ensureLogin()) return
+    if (!canVote) {
+      toast.warning('当前不在投票期')
+      return
+    }
+    if (submission.user_id === user?.id) {
+      toast.warning('不能给自己的作品投票')
+      return
+    }
+    if (voteLoading[submission.id]) return
+    setVoteLoading((prev) => ({ ...prev, [submission.id]: true }))
+    const alreadyVoted = myVoteSet.has(submission.id)
+    try {
+      const res = alreadyVoted
+        ? await voteApi.cancel(submission.id)
+        : await voteApi.vote(submission.id)
+      updateSubmissionVote(submission.id, res)
+      setMyVoteIds((prev) => {
+        const next = new Set(prev)
+        if (res?.voted) {
+          next.add(submission.id)
+        } else {
+          next.delete(submission.id)
+        }
+        return Array.from(next)
+      })
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || (alreadyVoted ? '取消投票失败' : '投票失败'))
+    } finally {
+      setVoteLoading((prev) => ({ ...prev, [submission.id]: false }))
+    }
+  }
+
+  const getVoteState = useCallback((entry) => {
+    if (activeTab !== 'review') return null
+    const userId = entry?.user?.id
+    if (!userId) {
+      return {
+        disabled: true,
+        disabledReason: '暂无可投票作品',
+      }
+    }
+    const submission = submissionByUser.get(userId)
+    if (!submission) {
+      return {
+        disabled: true,
+        disabledReason: '暂无可投票作品',
+      }
+    }
+    const voted = myVoteSet.has(submission.id)
+    const isOwner = submission.user_id === user?.id
+    let disabledReason = null
+    if (!canVote) {
+      disabledReason = '当前不在投票期'
+    } else if (isOwner) {
+      disabledReason = '不能给自己的作品投票'
+    }
+    const loading = Boolean(voteLoading[submission.id])
+    return {
+      submission,
+      voteCount: submission.vote_count ?? 0,
+      voted,
+      disabled: Boolean(disabledReason) || loading,
+      disabledReason,
+    }
+  }, [activeTab, submissionByUser, myVoteSet, user, canVote, voteLoading])
 
   const items = data?.items || []
   const top3 = items.slice(0, 3)
@@ -621,6 +822,8 @@ export default function RankingPage() {
                     key={`${activeTab}-${entry?.project_id ?? entry?.registration_id ?? entry?.user_id ?? entry?.submission_id ?? entry?.rank}`}
                     entry={entry}
                     mode={activeTab}
+                    voteState={getVoteState(entry)}
+                    onVote={handleVote}
                   />
                 ))}
               </div>

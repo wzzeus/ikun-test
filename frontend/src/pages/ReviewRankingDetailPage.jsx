@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Award, ExternalLink, Github, Star } from 'lucide-react'
 import { contestApi, projectApi } from '../services'
-
-const CONTEST_ID = 1
+import { useContestId } from '@/hooks/useContestId'
 
 const STATUS_LABELS = {
   draft: '草稿',
@@ -27,6 +26,7 @@ function formatScore(value) {
 
 export default function ReviewRankingDetailPage() {
   const { projectId } = useParams()
+  const { contestId } = useContestId()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [detail, setDetail] = useState(null)
@@ -40,7 +40,7 @@ export default function ReviewRankingDetailPage() {
     setAccess(null)
 
     contestApi
-      .getRankingDetail(CONTEST_ID, projectId)
+      .getRankingDetail(contestId, projectId)
       .then(async (res) => {
         if (!active) return
         setDetail(res)
@@ -67,7 +67,7 @@ export default function ReviewRankingDetailPage() {
     return () => {
       active = false
     }
-  }, [projectId])
+  }, [projectId, contestId])
 
   const accessUrl = useMemo(() => buildAccessUrl(access?.domain || ''), [access?.domain])
 

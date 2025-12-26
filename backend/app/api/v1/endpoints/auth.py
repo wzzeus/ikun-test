@@ -4,6 +4,7 @@
 import base64
 import json
 import re
+import logging
 from secrets import token_urlsafe
 from typing import Optional
 from urllib.parse import urlencode, quote
@@ -30,6 +31,7 @@ from app.services.github_oauth import (
     fetch_github_emails,
     get_primary_email,
 )
+from app.services.media_service import AVATAR_MAX_BYTES, download_image_to_media, is_local_media_url
 from app.services.points_service import PointsService
 from app.models.points import PointsReason
 
@@ -37,6 +39,7 @@ from app.models.points import PointsReason
 REGISTER_BONUS_POINTS = 500
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _sanitize_next_path(next_path: Optional[str]) -> str:
@@ -127,7 +130,14 @@ async def _upsert_linuxdo_user(db: AsyncSession, userinfo: dict) -> User:
     linux_username = (userinfo.get("username") or "").strip()
     display_name = (userinfo.get("name") or "").strip() or None
     avatar_template = userinfo.get("avatar_template") or None
-    avatar_url = normalize_avatar_url(avatar_template)
+    download_url = normalize_avatar_url(avatar_template)
+    avatar_url = None
+    if download_url and (user is None or not is_local_media_url(user.avatar_url)):
+        try:
+            media = await download_image_to_media(download_url, "avatars", AVATAR_MAX_BYTES)
+            avatar_url = media.url if media else None
+        except HTTPException as exc:
+            logger.warning("Linux.do 头像下载失败: %s", getattr(exc, "detail", exc))
     active = bool(userinfo.get("active", True))
     trust_level = userinfo.get("trust_level")
     silenced = bool(userinfo.get("silenced", False))
@@ -237,7 +247,14 @@ async def _upsert_github_user(db: AsyncSession, userinfo: dict, email: Optional[
     # 解析用户信息
     github_username = (userinfo.get("login") or "").strip()
     display_name = (userinfo.get("name") or "").strip() or None
-    avatar_url = userinfo.get("avatar_url") or None
+    avatar_source_url = userinfo.get("avatar_url") or None
+    avatar_url = None
+    if avatar_source_url and (user is None or not is_local_media_url(user.avatar_url)):
+        try:
+            media = await download_image_to_media(avatar_source_url, "avatars", AVATAR_MAX_BYTES)
+            avatar_url = media.url if media else None
+        except HTTPException as exc:
+            logger.warning("GitHub 头像下载失败: %s", getattr(exc, "detail", exc))
     github_email = email or userinfo.get("email")
 
     is_new_user = False

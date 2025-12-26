@@ -7,7 +7,7 @@ from app.api.v1.endpoints import (
     auth, contest, submission, vote, user, registration,
     github, cheer, quota, achievement, points, lottery, prediction, admin,
     review_center, announcement, exchange, task, slot_machine, gacha, puzzle,
-    project, project_review_center
+    project, project_review_center, media
 )
 
 router = APIRouter()
@@ -17,6 +17,7 @@ router.include_router(user.router, prefix="/users", tags=["用户"])
 router.include_router(contest.router, prefix="/contests", tags=["比赛"])
 router.include_router(submission.router, prefix="/submissions", tags=["作品"])
 router.include_router(project.router, tags=["作品部署"])
+router.include_router(media.router, prefix="/media", tags=["媒体文件"])
 router.include_router(vote.router, prefix="/votes", tags=["投票"])
 router.include_router(registration.router, tags=["报名"])
 router.include_router(github.router, tags=["GitHub统计"])

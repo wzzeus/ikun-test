@@ -31,8 +31,8 @@ import { useRegistrationStore } from '@/stores/registrationStore'
 import { useToast } from '@/components/Toast'
 import { RegistrationModal } from '@/components/registration'
 import { cn } from '@/lib/utils'
-
-const CONTEST_ID = 1
+import { useContestId } from '@/hooks/useContestId'
+import { IMAGE_ACCEPT, validateImageFile } from '@/utils/media'
 
 const ATTACHMENT_TYPES = {
   DEMO_VIDEO: 'demo_video',
@@ -51,6 +51,9 @@ const ACCEPTS = {
   [ATTACHMENT_TYPES.API_SCREENSHOT]: 'image/png,image/jpeg,image/jpg,image/webp,.png,.jpg,.jpeg,.webp',
   [ATTACHMENT_TYPES.API_LOG]: 'text/plain,application/json,application/zip,application/x-zip-compressed,application/gzip,.txt,.log,.json,.zip,.gz',
 }
+
+const PROJECT_COVER_MAX_BYTES = 5 * 1024 * 1024
+const PROJECT_SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024
 
 const PROJECT_STATUS_LABELS = {
   draft: '草稿',
@@ -119,14 +122,6 @@ function buildAccessUrl(domain) {
   if (!domain) return ''
   if (domain.startsWith('http://') || domain.startsWith('https://')) return domain
   return `//${domain}`
-}
-
-/** 解析截图链接 */
-function parseScreenshotUrls(value) {
-  return String(value || '')
-    .split(/[\n,，;；]+/)
-    .map((item) => item.trim())
-    .filter(Boolean)
 }
 
 /** 验证镜像引用 */
@@ -495,6 +490,7 @@ export default function SubmitPage() {
   const queryClient = useQueryClient()
 
   const token = useAuthStore((s) => s.token)
+  const { contestId } = useContestId()
 
   const registration = useRegistrationStore((s) => s.registration)
   const registrationStatus = useRegistrationStore((s) => s.status)
@@ -520,8 +516,6 @@ export default function SubmitPage() {
     repo_url: '',
     demo_url: '',
     readme_url: '',
-    cover_image_url: '',
-    screenshot_urls_text: '',
     project_doc_md: '',
   })
 
@@ -529,19 +523,21 @@ export default function SubmitPage() {
   const initProjectMetaRef = useRef(false)
   const createDraftPromiseRef = useRef(null)
   const initImageRefDone = useRef(false)
+  const coverInputRef = useRef(null)
+  const screenshotInputRef = useRef(null)
 
   // 检查报名状态
   useEffect(() => {
     if (!token) return
-    checkRegistrationStatus(CONTEST_ID).catch(() => {})
-  }, [token, checkRegistrationStatus])
+    checkRegistrationStatus(contestId).catch(() => {})
+  }, [token, contestId, checkRegistrationStatus])
 
   // 获取我的提交
   const mineQuery = useQuery({
-    queryKey: ['submission', 'mine', CONTEST_ID],
+    queryKey: ['submission', 'mine', contestId],
     enabled: !!token,
     queryFn: async () => {
-      const res = await submissionApi.getMine(CONTEST_ID)
+      const res = await submissionApi.getMine(contestId)
       return res?.items?.[0] || null
     },
     staleTime: 1000 * 15,
@@ -550,10 +546,10 @@ export default function SubmitPage() {
 
   // 获取我的作品
   const projectQuery = useQuery({
-    queryKey: ['project', 'mine', CONTEST_ID],
+    queryKey: ['project', 'mine', contestId],
     enabled: !!token,
     queryFn: async () => {
-      const res = await projectApi.list({ contest_id: CONTEST_ID, mine: true })
+      const res = await projectApi.list({ contest_id: contestId, mine: true })
       return res?.items?.[0] || null
     },
     staleTime: 1000 * 15,
@@ -631,10 +627,6 @@ export default function SubmitPage() {
     setForm((prev) => ({
       ...prev,
       readme_url: project?.readme_url || '',
-      cover_image_url: project?.cover_image_url || '',
-      screenshot_urls_text: Array.isArray(project?.screenshot_urls)
-        ? project.screenshot_urls.join('\n')
-        : '',
     }))
     initProjectMetaRef.current = true
   }, [project?.id])
@@ -643,14 +635,14 @@ export default function SubmitPage() {
   const createDraftMutation = useMutation({
     mutationFn: (payload) => submissionApi.create(payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', CONTEST_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', contestId] })
     },
   })
 
   const updateDraftMutation = useMutation({
     mutationFn: ({ id, payload }) => submissionApi.update(id, payload),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', CONTEST_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', contestId] })
     },
   })
 
@@ -661,7 +653,7 @@ export default function SubmitPage() {
   const finalizeMutation = useMutation({
     mutationFn: (id) => submissionApi.finalize(id),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', CONTEST_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', contestId] })
     },
   })
 
@@ -675,17 +667,14 @@ export default function SubmitPage() {
       if (!repoCheck.ok) {
         throw new Error(repoCheck.message)
       }
-      const screenshotUrls = parseScreenshotUrls(form.screenshot_urls_text)
       const payload = {
-        contest_id: CONTEST_ID,
+        contest_id: contestId,
         title,
         summary: String(form.description || '').trim() || null,
         description: null,
         repo_url: form.repo_url?.trim() || null,
         demo_url: form.demo_url?.trim() || null,
         readme_url: form.readme_url?.trim() || null,
-        cover_image_url: form.cover_image_url?.trim() || null,
-        screenshot_urls: screenshotUrls.length > 0 ? screenshotUrls : null,
       }
       if (!project?.id) return projectApi.create(payload)
       const { contest_id, ...updatePayload } = payload
@@ -693,7 +682,66 @@ export default function SubmitPage() {
     },
     onSuccess: async () => {
       toast.success(project?.id ? '作品信息已更新' : '作品已创建')
-      await queryClient.invalidateQueries({ queryKey: ['project', 'mine', CONTEST_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['project', 'mine', contestId] })
+    },
+    onError: (e) => {
+      toast.error(getErrorMessage(e))
+    },
+  })
+
+  const uploadCoverMutation = useMutation({
+    mutationFn: async (file) => {
+      if (!project?.id) throw new Error('请先保存作品信息')
+      return projectApi.uploadCover(project.id, file)
+    },
+    onSuccess: async () => {
+      toast.success('封面已上传')
+      await queryClient.invalidateQueries({ queryKey: ['project', 'mine', contestId] })
+    },
+    onError: (e) => {
+      toast.error(getErrorMessage(e))
+    },
+  })
+
+  const deleteCoverMutation = useMutation({
+    mutationFn: async () => {
+      if (!project?.id) throw new Error('请先保存作品信息')
+      return projectApi.deleteCover(project.id)
+    },
+    onSuccess: async () => {
+      toast.success('封面已删除')
+      await queryClient.invalidateQueries({ queryKey: ['project', 'mine', contestId] })
+    },
+    onError: (e) => {
+      toast.error(getErrorMessage(e))
+    },
+  })
+
+  const uploadScreenshotMutation = useMutation({
+    mutationFn: async (files) => {
+      if (!project?.id) throw new Error('请先保存作品信息')
+      for (const file of files) {
+        await projectApi.uploadScreenshot(project.id, file)
+      }
+      return true
+    },
+    onSuccess: async () => {
+      toast.success('截图已上传')
+      await queryClient.invalidateQueries({ queryKey: ['project', 'mine', contestId] })
+    },
+    onError: (e) => {
+      toast.error(getErrorMessage(e))
+    },
+  })
+
+  const deleteScreenshotMutation = useMutation({
+    mutationFn: async (url) => {
+      if (!project?.id) throw new Error('请先保存作品信息')
+      return projectApi.deleteScreenshot(project.id, url)
+    },
+    onSuccess: async () => {
+      toast.success('截图已删除')
+      await queryClient.invalidateQueries({ queryKey: ['project', 'mine', contestId] })
     },
     onError: (e) => {
       toast.error(getErrorMessage(e))
@@ -711,7 +759,7 @@ export default function SubmitPage() {
       toast.success('镜像已提交，正在部署')
       await queryClient.invalidateQueries({ queryKey: ['project', 'submissions', project?.id] })
       await queryClient.invalidateQueries({ queryKey: ['project', 'access', project?.id] })
-      await queryClient.invalidateQueries({ queryKey: ['project', 'mine', CONTEST_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['project', 'mine', contestId] })
     },
     onError: (e) => {
       toast.error(getErrorMessage(e))
@@ -721,9 +769,61 @@ export default function SubmitPage() {
   const deleteAttachmentMutation = useMutation({
     mutationFn: ({ submissionId, attachmentId }) => submissionApi.deleteAttachment(submissionId, attachmentId),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', CONTEST_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', contestId] })
     },
   })
+
+  const handleCoverPick = () => {
+    if (!project?.id) {
+      toast.error('请先保存作品信息')
+      return
+    }
+    if (uploadCoverMutation.isPending || deleteCoverMutation.isPending) return
+    coverInputRef.current?.click()
+  }
+
+  const handleCoverChange = (event) => {
+    const file = event.target.files?.[0] || null
+    event.target.value = ''
+    if (!file) return
+    const error = validateImageFile(file, PROJECT_COVER_MAX_BYTES)
+    if (error) {
+      toast.error(error)
+      return
+    }
+    uploadCoverMutation.mutate(file)
+  }
+
+  const handleCoverRemove = () => {
+    if (!project?.cover_image_url) return
+    deleteCoverMutation.mutate()
+  }
+
+  const handleScreenshotPick = () => {
+    if (!project?.id) {
+      toast.error('请先保存作品信息')
+      return
+    }
+    if (uploadScreenshotMutation.isPending || deleteScreenshotMutation.isPending) return
+    screenshotInputRef.current?.click()
+  }
+
+  const handleScreenshotChange = (event) => {
+    const files = Array.from(event.target.files || [])
+    event.target.value = ''
+    if (files.length === 0) return
+    const error = files.map((file) => validateImageFile(file, PROJECT_SCREENSHOT_MAX_BYTES)).find(Boolean)
+    if (error) {
+      toast.error(error)
+      return
+    }
+    uploadScreenshotMutation.mutate(files)
+  }
+
+  const handleScreenshotRemove = (url) => {
+    if (!url) return
+    deleteScreenshotMutation.mutate(url)
+  }
 
   // 附件数据
   const attachments = submission?.attachments
@@ -757,6 +857,8 @@ export default function SubmitPage() {
     if (registrationStatus !== 'approved') return { ok: false, message: '报名未审核通过，暂不可提交镜像部署' }
     return { ok: true, message: '' }
   }, [token, registrationStatus, registration])
+
+  const canEditImages = !!project?.id && !!token && canUseSubmission.ok && isEditable
 
   // 本地完整性检查
   const localChecklist = useMemo(() => {
@@ -802,7 +904,7 @@ export default function SubmitPage() {
     }
 
     const createPromise = createDraftMutation.mutateAsync({
-      contest_id: CONTEST_ID,
+      contest_id: contestId,
       title,
       description: form.description || null,
       repo_url: form.repo_url.trim(),
@@ -840,7 +942,7 @@ export default function SubmitPage() {
 
       if (!submission?.id) {
         await createDraftMutation.mutateAsync({
-          contest_id: CONTEST_ID,
+          contest_id: contestId,
           title,
           description: form.description || null,
           repo_url: form.repo_url.trim(),
@@ -922,7 +1024,7 @@ export default function SubmitPage() {
 
       setUploadState((s) => ({ ...s, [type]: { uploading: false, progress: 100 } }))
       setValidateResult(null)
-      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', CONTEST_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', contestId] })
       toast.success('上传完成')
     } catch (e) {
       setUploadState((s) => ({ ...s, [type]: { uploading: false, progress: 0 } }))
@@ -992,7 +1094,7 @@ export default function SubmitPage() {
       setFinalizeOpen(false)
       setFinalizeSubmissionId(null)
       toast.success('已最终提交，期待你的 C 位出道！')
-      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', CONTEST_ID] })
+      await queryClient.invalidateQueries({ queryKey: ['submission', 'mine', contestId] })
       navigate('/my-project')
     } catch (e) {
       toast.error(getErrorMessage(e))
@@ -1524,20 +1626,60 @@ export default function SubmitPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label htmlFor="cover_image_url" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                      封面图链接（可选）
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                      封面图（可选）
                     </label>
-                    <input
-                      id="cover_image_url"
-                      type="text"
-                      value={form.cover_image_url}
-                      onChange={(e) => setForm((s) => ({ ...s, cover_image_url: e.target.value }))}
-                      placeholder="https://... 或 //..."
-                      disabled={!isEditable}
-                      className="w-full h-10 px-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        ref={coverInputRef}
+                        type="file"
+                        accept={IMAGE_ACCEPT}
+                        className="hidden"
+                        onChange={handleCoverChange}
+                        disabled={!canEditImages}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleCoverPick}
+                        disabled={!canEditImages || uploadCoverMutation.isPending || deleteCoverMutation.isPending}
+                        className={cn(
+                          'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-all h-10 px-4',
+                          !canEditImages || uploadCoverMutation.isPending || deleteCoverMutation.isPending
+                            ? 'opacity-50 pointer-events-none bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-500'
+                            : 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 shadow-lg shadow-orange-500/20'
+                        )}
+                      >
+                        <Upload className="w-4 h-4" />
+                        {uploadCoverMutation.isPending ? '上传中...' : '上传封面'}
+                      </button>
+                      {project?.cover_image_url && (
+                        <button
+                          type="button"
+                          onClick={handleCoverRemove}
+                          disabled={!canEditImages || deleteCoverMutation.isPending || uploadCoverMutation.isPending}
+                          className={cn(
+                            'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition-all h-10 px-3 border',
+                            !canEditImages || deleteCoverMutation.isPending || uploadCoverMutation.isPending
+                              ? 'opacity-50 pointer-events-none border-slate-200 text-slate-400 dark:border-slate-700'
+                              : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          )}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                          删除
+                        </button>
+                      )}
+                    </div>
+                    {project?.cover_image_url ? (
+                      <img
+                        src={project.cover_image_url}
+                        alt="作品封面"
+                        className="mt-3 w-full max-w-xs rounded-xl border border-slate-200 dark:border-slate-700 object-cover"
+                      />
+                    ) : (
+                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">未上传封面</div>
+                    )}
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      建议 16:9 比例，支持图床/仓库原图链接
+                      建议 16:9 比例，最大 5MB
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -1560,20 +1702,66 @@ export default function SubmitPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <label htmlFor="screenshot_urls" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    截图链接（可选）
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                    截图（可选）
                   </label>
-                  <textarea
-                    id="screenshot_urls"
-                    value={form.screenshot_urls_text}
-                    onChange={(e) => setForm((s) => ({ ...s, screenshot_urls_text: e.target.value }))}
-                    placeholder="每行一个链接，例如：https://.../1.png"
-                    disabled={!isEditable}
-                    rows={3}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed resize-none"
-                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      ref={screenshotInputRef}
+                      type="file"
+                      accept={IMAGE_ACCEPT}
+                      className="hidden"
+                      multiple
+                      onChange={handleScreenshotChange}
+                      disabled={!canEditImages}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleScreenshotPick}
+                      disabled={!canEditImages || uploadScreenshotMutation.isPending || deleteScreenshotMutation.isPending}
+                      className={cn(
+                        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-semibold transition-all h-10 px-4',
+                        !canEditImages || uploadScreenshotMutation.isPending || deleteScreenshotMutation.isPending
+                          ? 'opacity-50 pointer-events-none bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-500'
+                          : 'bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 shadow-lg shadow-orange-500/20'
+                      )}
+                    >
+                      <Upload className="w-4 h-4" />
+                      {uploadScreenshotMutation.isPending ? '上传中...' : '上传截图'}
+                    </button>
+                  </div>
+                  {Array.isArray(project?.screenshot_urls) && project.screenshot_urls.length > 0 ? (
+                    <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {project.screenshot_urls.map((url) => (
+                        <div key={url} className="relative group">
+                          <img
+                            src={url}
+                            alt="作品截图"
+                            className="w-full h-28 rounded-lg border border-slate-200 dark:border-slate-700 object-cover"
+                          />
+                          {canEditImages && (
+                            <button
+                              type="button"
+                              onClick={() => handleScreenshotRemove(url)}
+                              disabled={deleteScreenshotMutation.isPending}
+                              className={cn(
+                                'absolute top-2 right-2 inline-flex items-center justify-center rounded-full w-7 h-7 text-white text-xs shadow-md',
+                                deleteScreenshotMutation.isPending
+                                  ? 'opacity-60 bg-slate-400'
+                                  : 'bg-black/70 hover:bg-black/80'
+                              )}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">未上传截图</div>
+                  )}
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    每行一个链接，支持多张截图
+                    支持多张截图，单张最大 5MB
                   </p>
                 </div>
               </div>
@@ -1774,7 +1962,7 @@ pnpm i
         />
 
         {/* 报名弹窗 */}
-        <RegistrationModal contestId={CONTEST_ID} />
+        <RegistrationModal contestId={contestId} />
       </div>
     </div>
   )

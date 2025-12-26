@@ -86,3 +86,6 @@ class RateLimits:
 
     # 点赞/收藏 - 每分钟最多 30 次
     INTERACTION = "30/minute"
+
+    # 投票 - 每分钟最多 30 次
+    VOTE = "30/minute"

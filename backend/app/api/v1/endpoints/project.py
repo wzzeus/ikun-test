@@ -6,7 +6,7 @@ import json
 import logging
 from typing import Optional, Tuple
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status, Request, File, UploadFile
 import httpx
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -22,6 +22,12 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import limiter, RateLimits
 from app.core.redis import close_redis, get_redis
+from app.services.media_service import (
+    delete_media_file,
+    ensure_local_media_url,
+    ensure_local_media_urls,
+    save_upload_file,
+)
 from app.models.contest import Contest, ContestPhase
 from app.models.project import Project, ProjectStatus
 from app.models.project_like import ProjectLike
@@ -51,6 +57,10 @@ from app.services.project_domain import build_project_domain
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# 图片大小限制（字节）
+MAX_COVER_BYTES = 5 * 1024 * 1024
+MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
 
 ALLOWED_REGISTRIES = {"ghcr.io", "docker.io"}
 ALLOWED_REPO_HOSTS = ("https://github.com/", "https://gitee.com/")
@@ -399,6 +409,8 @@ async def create_project(
             detail="该比赛已存在作品，请使用更新接口"
         )
 
+    cover_image_url = ensure_local_media_url(payload.cover_image_url, "封面图")
+    screenshot_urls = ensure_local_media_urls(payload.screenshot_urls, "截图")
     project = Project(
         contest_id=payload.contest_id,
         user_id=current_user.id,
@@ -406,8 +418,8 @@ async def create_project(
         summary=payload.summary,
         description=payload.description,
         repo_url=payload.repo_url,
-        cover_image_url=payload.cover_image_url,
-        screenshot_urls=payload.screenshot_urls,
+        cover_image_url=cover_image_url,
+        screenshot_urls=screenshot_urls,
         readme_url=payload.readme_url,
         demo_url=payload.demo_url,
         status=ProjectStatus.DRAFT.value,
@@ -672,11 +684,114 @@ async def update_project(
     update_data = payload.model_dump(exclude_unset=True)
     if "repo_url" in update_data and update_data["repo_url"]:
         await ensure_public_repo_url(update_data["repo_url"])
+    if "cover_image_url" in update_data:
+        update_data["cover_image_url"] = ensure_local_media_url(update_data.get("cover_image_url"), "封面图")
+    if "screenshot_urls" in update_data:
+        update_data["screenshot_urls"] = ensure_local_media_urls(update_data.get("screenshot_urls"), "截图")
     for field, value in update_data.items():
         setattr(project, field, value)
 
     await db.commit()
     await db.refresh(project)
+    return build_project_response(project)
+
+
+@router.post(
+    "/projects/{project_id}/cover",
+    response_model=ProjectResponse,
+    summary="上传作品封面",
+)
+async def upload_project_cover(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """上传作品封面"""
+    project = await get_project_or_404(db, project_id)
+    ensure_owner_or_admin(project, current_user)
+
+    media = await save_upload_file(file, "project-covers", MAX_COVER_BYTES)
+    old_url = project.cover_image_url
+    project.cover_image_url = media.url
+    await db.commit()
+    await db.refresh(project)
+
+    delete_media_file(old_url)
+    return build_project_response(project)
+
+
+@router.delete(
+    "/projects/{project_id}/cover",
+    response_model=ProjectResponse,
+    summary="删除作品封面",
+)
+async def delete_project_cover(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """删除作品封面"""
+    project = await get_project_or_404(db, project_id)
+    ensure_owner_or_admin(project, current_user)
+
+    old_url = project.cover_image_url
+    project.cover_image_url = None
+    await db.commit()
+    await db.refresh(project)
+
+    delete_media_file(old_url)
+    return build_project_response(project)
+
+
+@router.post(
+    "/projects/{project_id}/screenshots",
+    response_model=ProjectResponse,
+    summary="上传作品截图",
+)
+async def upload_project_screenshot(
+    project_id: int,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """上传作品截图"""
+    project = await get_project_or_404(db, project_id)
+    ensure_owner_or_admin(project, current_user)
+
+    media = await save_upload_file(file, "project-screenshots", MAX_SCREENSHOT_BYTES)
+    urls = list(project.screenshot_urls or [])
+    urls.append(media.url)
+    project.screenshot_urls = urls
+    await db.commit()
+    await db.refresh(project)
+    return build_project_response(project)
+
+
+@router.delete(
+    "/projects/{project_id}/screenshots",
+    response_model=ProjectResponse,
+    summary="删除作品截图",
+)
+async def delete_project_screenshot(
+    project_id: int,
+    url: str = Query(..., description="截图URL"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """删除作品截图"""
+    project = await get_project_or_404(db, project_id)
+    ensure_owner_or_admin(project, current_user)
+    ensure_local_media_url(url, "截图")
+
+    urls = list(project.screenshot_urls or [])
+    if url not in urls:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="截图不存在")
+    project.screenshot_urls = [item for item in urls if item != url] or None
+    await db.commit()
+    await db.refresh(project)
+
+    delete_media_file(url)
     return build_project_response(project)
 
 

@@ -4,7 +4,7 @@
 from datetime import datetime
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status, File, UploadFile
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.security import decode_token
 from app.core.config import settings
 from app.models.user import User
+from app.services.media_service import AVATAR_MAX_BYTES, delete_media_file, save_upload_file
 
 router = APIRouter()
 
@@ -20,6 +21,7 @@ router = APIRouter()
 VALID_ROLES = ["admin", "reviewer", "contestant", "spectator"]
 # 用户自选角色白名单（只能选这两个）
 SELECTABLE_ROLES = ["contestant", "spectator"]
+
 
 
 class UserResponse(BaseModel):
@@ -123,6 +125,22 @@ async def get_current_user(
     current_user: User = Depends(get_current_user_dep),
 ):
     """获取当前登录用户的完整信息，包含角色"""
+    return UserResponse.model_validate(current_user)
+
+
+@router.post("/me/avatar", response_model=UserResponse, summary="上传头像")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user_dep),
+):
+    """上传头像"""
+    media = await save_upload_file(file, "avatars", AVATAR_MAX_BYTES)
+    old_url = current_user.avatar_url
+    current_user.avatar_url = media.url
+    await db.commit()
+    await db.refresh(current_user)
+    delete_media_file(old_url)
     return UserResponse.model_validate(current_user)
 
 

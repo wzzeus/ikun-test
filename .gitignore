@@ -18,6 +18,9 @@ venv/
 .sync.tar.gz
 .spec-workflow/
 
+# 媒体上传目录
+backend/app/uploads/
+
 # 本地文档
 docs/进度与待办.md
 待办清单.md

@@ -43,7 +43,9 @@ import * as echarts from 'echarts'
 import { useAuthStore } from '../stores/authStore'
 import { useToast } from '../components/Toast'
 import { useThemeStore } from '../stores/themeStore'
-import { adminApi2, predictionApi, projectApi } from '../services'
+import { adminApi2, contestApi, predictionApi, projectApi } from '../services'
+import { resolveAvatarUrl } from '../utils/avatar'
+import { IMAGE_ACCEPT, validateImageFile } from '../utils/media'
 
 // Tab 组件 - 现代简洁风格
 function Tab({ active, onClick, children, icon: Icon }) {
@@ -123,10 +125,34 @@ const CONTEST_PHASE_OPTIONS = [
   { value: 'ended', label: '已结束' },
 ]
 
+const CONTEST_VISIBILITY_LABELS = {
+  draft: '草稿',
+  published: '已发布',
+  hidden: '已隐藏',
+}
+
+const CONTEST_VISIBILITY_OPTIONS = [
+  { value: 'published', label: '已发布' },
+  { value: 'draft', label: '草稿' },
+  { value: 'hidden', label: '已隐藏' },
+]
+
+const CONTEST_VISIBILITY_STYLES = {
+  draft: 'bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300',
+  published: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200',
+  hidden: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-200',
+}
+
 const CONTEST_FORM_DEFAULT = {
   title: '',
   description: '',
   phase: 'upcoming',
+  visibility: 'published',
+  banner_url: '',
+  rules_md: '',
+  prizes_md: '',
+  review_rules_md: '',
+  faq_md: '',
   signup_start: '',
   signup_end: '',
   submit_start: '',
@@ -134,6 +160,8 @@ const CONTEST_FORM_DEFAULT = {
   vote_start: '',
   vote_end: '',
 }
+
+const MAX_BANNER_BYTES = 5 * 1024 * 1024
 
 const toContestDatetimeInput = (value) => {
   if (!value) return ''
@@ -1027,7 +1055,7 @@ function UsersPanel() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <img
-                        src={user.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${user.username}`}
+                        src={resolveAvatarUrl(user?.avatar_url)}
                         alt=""
                         className="w-8 h-8 rounded-full"
                       />
@@ -1182,6 +1210,8 @@ function UsersPanel() {
     const [saving, setSaving] = useState(false)
     const [editingContest, setEditingContest] = useState(null)
     const [formData, setFormData] = useState({ ...CONTEST_FORM_DEFAULT })
+    const [bannerUploading, setBannerUploading] = useState(false)
+    const bannerInputRef = useRef(null)
 
     const loadContests = async () => {
       setLoading(true)
@@ -1204,6 +1234,12 @@ function UsersPanel() {
       title: contest?.title || '',
       description: contest?.description || '',
       phase: contest?.phase || 'upcoming',
+      visibility: contest?.visibility || 'published',
+      banner_url: contest?.banner_url || '',
+      rules_md: contest?.rules_md || '',
+      prizes_md: contest?.prizes_md || '',
+      review_rules_md: contest?.review_rules_md || '',
+      faq_md: contest?.faq_md || '',
       signup_start: toContestDatetimeInput(contest?.signup_start),
       signup_end: toContestDatetimeInput(contest?.signup_end),
       submit_start: toContestDatetimeInput(contest?.submit_start),
@@ -1222,10 +1258,20 @@ function UsersPanel() {
       setFormData((prev) => ({ ...prev, [key]: value }))
     }
 
+    const normalizeText = (value) => {
+      const text = String(value ?? '').trim()
+      return text ? text : null
+    }
+
     const buildPayload = () => ({
       title: formData.title.trim(),
       description: formData.description.trim() || null,
       phase: formData.phase || null,
+      visibility: formData.visibility || null,
+      rules_md: normalizeText(formData.rules_md),
+      prizes_md: normalizeText(formData.prizes_md),
+      review_rules_md: normalizeText(formData.review_rules_md),
+      faq_md: normalizeText(formData.faq_md),
       signup_start: formData.signup_start || null,
       signup_end: formData.signup_end || null,
       submit_start: formData.submit_start || null,
@@ -1258,6 +1304,59 @@ function UsersPanel() {
         toast.error('保存赛事失败')
       } finally {
         setSaving(false)
+      }
+    }
+
+    const handleBannerPick = () => {
+      if (!editingContest?.id) {
+        toast.error('请先保存赛事后再上传 Banner')
+        return
+      }
+      if (bannerUploading) return
+      bannerInputRef.current?.click()
+    }
+
+    const handleBannerChange = async (event) => {
+      const file = event.target.files?.[0] || null
+      event.target.value = ''
+      if (!file) return
+      if (!editingContest?.id) {
+        toast.error('请先保存赛事后再上传 Banner')
+        return
+      }
+      const error = validateImageFile(file, MAX_BANNER_BYTES)
+      if (error) {
+        toast.error(error)
+        return
+      }
+      setBannerUploading(true)
+      try {
+        const res = await contestApi.uploadBanner(editingContest.id, file)
+        setFormData((prev) => ({ ...prev, banner_url: res?.banner_url || prev.banner_url }))
+        toast.success('Banner 已上传')
+        await loadContests()
+      } catch (error) {
+        console.error('上传 Banner 失败:', error)
+        toast.error('上传 Banner 失败')
+      } finally {
+        setBannerUploading(false)
+      }
+    }
+
+    const handleClearBanner = async () => {
+      if (!editingContest?.id) return
+      if (bannerUploading) return
+      setBannerUploading(true)
+      try {
+        await adminApi2.patch(`/contests/${editingContest.id}`, { banner_url: null })
+        setFormData((prev) => ({ ...prev, banner_url: '' }))
+        toast.success('Banner 已清除')
+        await loadContests()
+      } catch (error) {
+        console.error('清除 Banner 失败:', error)
+        toast.error('清除 Banner 失败')
+      } finally {
+        setBannerUploading(false)
       }
     }
 
@@ -1320,6 +1419,11 @@ function UsersPanel() {
                         <span className="px-2 py-0.5 rounded-full text-xs bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-200">
                           {CONTEST_PHASE_LABELS[contest.phase] || contest.phase || '未知'}
                         </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs ${CONTEST_VISIBILITY_STYLES[contest.visibility] || 'bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-300'}`}
+                        >
+                          {CONTEST_VISIBILITY_LABELS[contest.visibility] || contest.visibility || '未知'}
+                        </span>
                       </div>
                       {contest.description && (
                         <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
@@ -1359,34 +1463,41 @@ function UsersPanel() {
         </div>
 
         {showEditor && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="w-full max-w-3xl mx-4 bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
-                <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-                  {editingContest ? '编辑赛事' : '新建赛事'}
-                </h3>
-                <button
-                  onClick={() => setShowEditor(false)}
-                  className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+          <div
+            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm overflow-y-auto"
+            onClick={() => setShowEditor(false)}
+          >
+            <div className="min-h-full flex items-start justify-center px-4 py-8">
+              <div
+                className="w-full max-w-3xl bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col max-h-[90vh]"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                    {editingContest ? '编辑赛事' : '新建赛事'}
+                  </h3>
+                  <button
+                    onClick={() => setShowEditor(false)}
+                    className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
 
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
-                      赛事标题 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.title}
-                      onChange={(e) => updateField('title', e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                      placeholder="请输入赛事名称"
-                    />
-                  </div>
+                <div className="p-6 space-y-4 overflow-y-auto">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                        赛事标题 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.title}
+                        onChange={(e) => updateField('title', e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                        placeholder="请输入赛事名称"
+                      />
+                    </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
                       当前阶段
@@ -1397,6 +1508,22 @@ function UsersPanel() {
                       className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                     >
                       {CONTEST_PHASE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      可见性
+                    </label>
+                    <select
+                      value={formData.visibility}
+                      onChange={(e) => updateField('visibility', e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                    >
+                      {CONTEST_VISIBILITY_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>
                           {option.label}
                         </option>
@@ -1416,6 +1543,115 @@ function UsersPanel() {
                     className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
                     placeholder="简要说明比赛内容与规则"
                   />
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 p-4 space-y-4">
+                  <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">赛事内容配置（Markdown）</div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      赛事 Banner（上传图片）
+                    </label>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <input
+                        ref={bannerInputRef}
+                        type="file"
+                        accept={IMAGE_ACCEPT}
+                        className="hidden"
+                        onChange={handleBannerChange}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleBannerPick}
+                        disabled={bannerUploading || !editingContest?.id}
+                        className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
+                          bannerUploading || !editingContest?.id
+                            ? 'opacity-50 pointer-events-none bg-slate-200 text-slate-500 dark:bg-slate-800 dark:text-slate-500'
+                            : 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white hover:from-blue-600 hover:to-indigo-600 shadow-lg shadow-blue-500/20'
+                        }`}
+                      >
+                        {bannerUploading ? '上传中...' : '上传 Banner'}
+                      </button>
+                      {formData.banner_url && (
+                        <button
+                          type="button"
+                          onClick={handleClearBanner}
+                          disabled={bannerUploading}
+                          className={`inline-flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${
+                            bannerUploading
+                              ? 'opacity-50 pointer-events-none border-slate-200 text-slate-400 dark:border-slate-700'
+                              : 'border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          清除 Banner
+                        </button>
+                      )}
+                    </div>
+                    {formData.banner_url ? (
+                      <div className="mt-3">
+                        <img
+                          src={formData.banner_url}
+                          alt="赛事 Banner"
+                          className="w-full max-w-xl rounded-xl border border-slate-200 dark:border-slate-700 object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">未上传 Banner</div>
+                    )}
+                    <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      建议 16:9 比例，最大 5MB。请先保存赛事后再上传。
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      赛事规则
+                    </label>
+                    <textarea
+                      value={formData.rules_md}
+                      onChange={(e) => updateField('rules_md', e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
+                      placeholder="填写赛事规则（Markdown）"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      奖项说明
+                    </label>
+                    <textarea
+                      value={formData.prizes_md}
+                      onChange={(e) => updateField('prizes_md', e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
+                      placeholder="填写奖项说明（Markdown）"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      评审规则
+                    </label>
+                    <textarea
+                      value={formData.review_rules_md}
+                      onChange={(e) => updateField('review_rules_md', e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
+                      placeholder="填写评审规则（Markdown）"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                      常见问题
+                    </label>
+                    <textarea
+                      value={formData.faq_md}
+                      onChange={(e) => updateField('faq_md', e.target.value)}
+                      rows={4}
+                      className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-vertical"
+                      placeholder="填写 FAQ（Markdown）"
+                    />
+                  </div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    支持 Markdown，保存后会在前台按段落展示。
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1509,7 +1745,8 @@ function UsersPanel() {
               </div>
             </div>
           </div>
-        )}
+        </div>
+      )}
       </div>
     )
   }
@@ -4452,7 +4689,7 @@ function ApiKeyMonitorPanel() {
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <img
-                      src={user?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${user?.username || 'user'}`}
+                      src={resolveAvatarUrl(user?.avatar_url)}
                       alt=""
                       className="w-10 h-10 rounded-full"
                     />
@@ -5383,7 +5620,7 @@ function OperationsLogPanel() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <img
-                          src={log.user?.avatar_url || `https://api.dicebear.com/7.x/initials/svg?seed=${log.user?.username || 'user'}`}
+                          src={resolveAvatarUrl(log.user?.avatar_url)}
                           alt=""
                           className="w-6 h-6 rounded-full"
                         />

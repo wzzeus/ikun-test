@@ -247,6 +247,8 @@ async def sync_contest_phases():
             now = datetime.now()
             updated = 0
             for contest in contests:
+                if hasattr(contest, "auto_phase_enabled") and not contest.auto_phase_enabled:
+                    continue
                 target_phase = resolve_contest_phase(contest, now)
                 if not target_phase:
                     continue

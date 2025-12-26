@@ -20,6 +20,7 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import { reviewCenterApi } from '../services'
 import { Badge } from '../components/ui/badge'
+import { resolveAvatarUrl } from '../utils/avatar'
 
 /**
  * 评审中心页面 - 评审员专属
@@ -268,7 +269,7 @@ export default function ReviewCenterPage() {
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div className="flex items-start gap-3 sm:gap-4">
                         <img
-                          src={sub.owner?.avatar_url || `https://ui-avatars.com/api/?name=${ownerName}`}
+                          src={resolveAvatarUrl(sub.owner?.avatar_url)}
                           alt={ownerName}
                           className="w-10 h-10 sm:w-12 sm:h-12 rounded-full flex-shrink-0"
                         />

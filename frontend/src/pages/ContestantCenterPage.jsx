@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import ReactECharts from 'echarts-for-react'
 import html2canvas from 'html2canvas'
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import api from '@/services/api'
+import { userApi } from '@/services'
 import {
   CheckCircle2,
   Clock,
@@ -45,10 +46,14 @@ import {
   Rocket,
   Cpu,
   FileDown,
+  Upload,
 } from 'lucide-react'
 import { useToast } from '@/components/Toast'
 import { RegistrationModal } from '@/components/registration'
 import ParticipantDetailModal from '@/components/participant/ParticipantDetailModal'
+import { useContestId } from '@/hooks/useContestId'
+import { resolveAvatarUrl } from '@/utils/avatar'
+import { IMAGE_ACCEPT, validateImageFile } from '@/utils/media'
 
 /**
  * 审核状态配置 - 高端版
@@ -101,8 +106,6 @@ const STATUS_CONFIG = {
   },
 }
 
-const CONTEST_ID = 1
-
 /**
  * 作品状态展示文案
  */
@@ -111,6 +114,15 @@ const PROJECT_STATUS_LABELS = {
   submitted: '已提交',
   online: '已上线',
   offline: '已下线',
+}
+
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024
+
+function getErrorMessage(error) {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string' && detail) return detail
+  if (typeof error?.message === 'string' && error.message) return error.message
+  return '操作失败，请稍后重试'
 }
 
 /**
@@ -545,6 +557,8 @@ export default function ContestantCenterPage() {
 
   const user = useAuthStore((s) => s.user)
   const token = useAuthStore((s) => s.token)
+  const setUser = useAuthStore((s) => s.setUser)
+  const { contestId } = useContestId()
   const registration = useRegistrationStore((s) => s.registration)
   const status = useRegistrationStore((s) => s.status)
   const checkStatus = useRegistrationStore((s) => s.checkStatus)
@@ -560,6 +574,8 @@ export default function ContestantCenterPage() {
   const [exportingPDF, setExportingPDF] = useState(false)
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [projectInfo, setProjectInfo] = useState(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const avatarInputRef = useRef(null)
 
   // 为展示页 modal 构建完整的参赛者数据
   const participantData = useMemo(() => {
@@ -603,8 +619,8 @@ export default function ContestantCenterPage() {
       navigate('/login')
       return
     }
-    checkStatus(CONTEST_ID).finally(() => setLoading(false))
-  }, [hydrated, token, checkStatus, navigate])
+    checkStatus(contestId).finally(() => setLoading(false))
+  }, [hydrated, token, contestId, checkStatus, navigate])
 
   useEffect(() => {
     if (!registration?.id) return
@@ -646,7 +662,7 @@ export default function ContestantCenterPage() {
 
     const loadProject = async () => {
       try {
-        const res = await api.get('/projects', { params: { contest_id: CONTEST_ID, mine: true } })
+        const res = await api.get('/projects', { params: { contest_id: contestId, mine: true } })
         const project = res?.items?.[0] || null
         if (active) setProjectInfo(project)
       } catch {
@@ -658,7 +674,7 @@ export default function ContestantCenterPage() {
     return () => {
       active = false
     }
-  }, [token, registration?.id])
+  }, [token, contestId, registration?.id])
 
   const handleRefresh = async () => {
     if (!registration?.id) return
@@ -698,6 +714,32 @@ export default function ContestantCenterPage() {
       toast.success('数据已刷新')
     } catch { toast.error('刷新失败') }
     finally { setRefreshing(false) }
+  }
+
+  const handleAvatarPick = () => {
+    if (!avatarInputRef.current) return
+    avatarInputRef.current.click()
+  }
+
+  const handleAvatarChange = async (event) => {
+    const file = event.target.files?.[0] || null
+    event.target.value = ''
+    if (!file) return
+    const error = validateImageFile(file, AVATAR_MAX_BYTES)
+    if (error) {
+      toast.error(error)
+      return
+    }
+    setAvatarUploading(true)
+    try {
+      const updated = await userApi.uploadAvatar(file)
+      setUser(updated)
+      toast.success('头像已更新')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setAvatarUploading(false)
+    }
   }
 
   const handleCopyApiKey = () => {
@@ -941,7 +983,7 @@ export default function ContestantCenterPage() {
                 <div className="relative">
                   <div className="absolute inset-0 bg-white/30 rounded-full blur-md animate-pulse" />
                   <img
-                    src={user?.avatar_url || `https://ui-avatars.com/api/?name=${user?.username}&background=random`}
+                    src={resolveAvatarUrl(user?.avatar_url)}
                     alt={user?.display_name}
                     className="relative w-24 h-24 rounded-full border-4 border-white/20 shadow-xl object-cover"
                   />
@@ -966,6 +1008,21 @@ export default function ContestantCenterPage() {
               </div>
 
               <div className="flex gap-3">
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept={IMAGE_ACCEPT}
+                  className="hidden"
+                  onChange={handleAvatarChange}
+                />
+                <Button
+                  onClick={handleAvatarPick}
+                  disabled={avatarUploading}
+                  className="bg-white/10 hover:bg-white/20 text-white border-white/10 backdrop-blur-md shadow-lg"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  {avatarUploading ? '上传中...' : '更换头像'}
+                </Button>
                 <Button
                   onClick={handleRefresh}
                   disabled={refreshing}
@@ -1430,7 +1487,7 @@ export default function ContestantCenterPage() {
                     >
                       <div className="flex items-start gap-2.5">
                         <img
-                          src={msg.user?.avatar_url || `https://ui-avatars.com/api/?name=${msg.user?.username || 'U'}&background=random&size=32`}
+                    src={resolveAvatarUrl(msg.user?.avatar_url)}
                           alt=""
                           className="w-7 h-7 rounded-full flex-shrink-0"
                         />
