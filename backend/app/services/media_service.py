@@ -15,6 +15,7 @@ import httpx
 from fastapi import HTTPException, UploadFile, status
 
 from app.core.config import settings
+from app.services.upload_quota import commit_upload_quota
 
 
 MEDIA_CATEGORIES = {
@@ -114,6 +115,8 @@ async def save_upload_file(
     file: UploadFile,
     category: str,
     max_bytes: int,
+    owner_id: int | None = None,
+    quota_scope: str = "media",
 ) -> MediaFile:
     extension = _resolve_extension(file.content_type, file.filename)
     filename = f"{uuid4().hex}{extension}"
@@ -136,6 +139,16 @@ async def save_upload_file(
                 await out_file.write(chunk)
     finally:
         await file.close()
+
+    if owner_id:
+        try:
+            await commit_upload_quota(owner_id, quota_scope, total_bytes)
+        except HTTPException:
+            try:
+                dest_path.unlink()
+            except Exception:
+                pass
+            raise
 
     return MediaFile(
         url=_build_public_url(category, filename),

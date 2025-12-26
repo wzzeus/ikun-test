@@ -32,6 +32,9 @@ const TasksPage = lazy(() => import('./pages/TasksPage'))
 const CodeChallengePage = lazy(() => import('./pages/CodeChallengePage'))
 const PointsHistoryPage = lazy(() => import('./pages/PointsHistoryPage'))
 const ProjectAccessPage = lazy(() => import('./pages/ProjectAccessPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'))
+const AccountSecurityPage = lazy(() => import('./pages/AccountSecurityPage'))
 
 // 加载中组件
 function PageLoading() {
@@ -79,6 +82,7 @@ function App() {
             <Route path="my-bets" element={<MyBetsPage />} />
             <Route path="my-project" element={<ContestantCenterPage />} />
             <Route path="projects/:projectId/access" element={<ProjectAccessPage />} />
+            <Route path="account/security" element={<AccountSecurityPage />} />
             <Route path="admin/review" element={<AdminReviewPage />} />
             <Route path="admin/dashboard" element={<AdminDashboardPage />} />
             <Route path="admin/activity" element={<ActivityManagePage />} />
@@ -86,6 +90,8 @@ function App() {
           </Route>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/role-guide" element={<RoleGuidePage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>

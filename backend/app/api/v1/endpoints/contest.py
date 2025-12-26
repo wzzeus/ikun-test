@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Request, status, File, UploadFile
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.v1.endpoints.submission import get_current_user, get_optional_user
 from app.core.database import get_db
+from app.core.rate_limit import limiter, RateLimits
 from app.models.contest import Contest, ContestPhase, ContestVisibility
 from app.models.project import Project, ProjectStatus
 from app.models.project_favorite import ProjectFavorite
@@ -25,6 +26,7 @@ from app.models.registration import Registration, RegistrationStatus
 from app.models.submission import Submission, SubmissionStatus
 from app.models.user import User
 from app.services.media_service import delete_media_file, ensure_local_media_url, save_upload_file
+from app.services.security_challenge import guard_challenge
 from app.schemas.review_center import ReviewStatsResponse
 from app.schemas.submission import UserBrief
 
@@ -298,10 +300,16 @@ async def build_project_ranking_items(
     """构建比赛作品排行榜列表"""
     project_result = await db.execute(
         select(Project)
+        .join(
+            Registration,
+            (Registration.contest_id == Project.contest_id)
+            & (Registration.user_id == Project.user_id),
+        )
         .options(selectinload(Project.user))
         .where(
             Project.contest_id == contest_id,
             Project.status.in_({ProjectStatus.SUBMITTED.value, ProjectStatus.ONLINE.value}),
+            Registration.status != RegistrationStatus.WITHDRAWN.value,
         )
     )
     projects = project_result.scalars().all()
@@ -821,7 +829,9 @@ async def update_contest(
     response_model=ContestResponse,
     summary="上传赛事 Banner（管理员）",
 )
+@limiter.limit(RateLimits.UPLOAD)
 async def upload_contest_banner(
+    request: Request,
     contest_id: int,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -829,13 +839,14 @@ async def upload_contest_banner(
 ):
     """上传赛事 Banner"""
     require_admin(current_user)
+    await guard_challenge(request, scope="upload", user_id=current_user.id)
 
     result = await db.execute(select(Contest).where(Contest.id == contest_id))
     contest = result.scalar_one_or_none()
     if contest is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="比赛不存在")
 
-    media = await save_upload_file(file, "contest-banners", MAX_BANNER_BYTES)
+    media = await save_upload_file(file, "contest-banners", MAX_BANNER_BYTES, owner_id=current_user.id)
     old_url = contest.banner_url
     contest.banner_url = media.url
     await db.commit()

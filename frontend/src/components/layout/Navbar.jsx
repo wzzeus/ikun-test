@@ -477,6 +477,14 @@ function UserDropdown({ user, logout }) {
 
           {/* 底部按钮 */}
           <div className="p-2 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+            <Link
+              to="/account/security"
+              onClick={() => setIsOpen(false)}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 text-sm font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] mb-2"
+            >
+              <Settings className="w-4 h-4" />
+              <span>账号安全</span>
+            </Link>
             <button
               type="button"
               onClick={() => {
@@ -581,12 +589,20 @@ export default function Navbar() {
                 <UserDropdown user={user} logout={logout} />
               </div>
             ) : (
-              <Link
-                to="/login"
-                className="bg-yellow-500 text-slate-900 px-4 py-2 rounded-full font-bold hover:bg-yellow-400 transition-all"
-              >
-                登录
-              </Link>
+              <div className="flex items-center space-x-3">
+                <Link
+                  to="/login"
+                  className="bg-yellow-500 text-slate-900 px-4 py-2 rounded-full font-bold hover:bg-yellow-400 transition-all"
+                >
+                  登录
+                </Link>
+                <Link
+                  to="/register"
+                  className="px-4 py-2 rounded-full font-bold border border-yellow-500 text-yellow-600 hover:bg-yellow-50 transition-all dark:text-yellow-400 dark:border-yellow-400 dark:hover:bg-yellow-900/20"
+                >
+                  注册
+                </Link>
+              </div>
             )}
 
             <ThemeToggleButton />
@@ -699,6 +715,14 @@ export default function Navbar() {
                     </Link>
                   </>
                 )}
+                <Link
+                  to="/account/security"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-slate-600 dark:text-slate-300"
+                >
+                  <Settings className="w-4 h-4" />
+                  账号安全
+                </Link>
                 <button
                   type="button"
                   onClick={() => {
@@ -711,13 +735,22 @@ export default function Navbar() {
                 </button>
               </>
             ) : (
-              <Link
-                to="/login"
-                onClick={() => setIsMenuOpen(false)}
-                className="block px-3 py-2 rounded-md text-base font-medium text-yellow-500 dark:text-yellow-400"
-              >
-                登录
-              </Link>
+              <>
+                <Link
+                  to="/login"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 rounded-md text-base font-medium text-yellow-500 dark:text-yellow-400"
+                >
+                  登录
+                </Link>
+                <Link
+                  to="/register"
+                  onClick={() => setIsMenuOpen(false)}
+                  className="block px-3 py-2 rounded-md text-base font-medium text-yellow-500 dark:text-yellow-400"
+                >
+                  注册
+                </Link>
+              </>
             )}
           </div>
         </div>

@@ -467,6 +467,26 @@ CREATE TABLE IF NOT EXISTS `point_records` (
   CONSTRAINT `fk_point_records_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='积分记录表';
 
+-- ============================================================================
+-- 密码重置令牌表
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS `password_reset_tokens` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+
+  `user_id` INT NOT NULL COMMENT '用户ID',
+  `token_hash` VARCHAR(64) NOT NULL COMMENT '重置令牌哈希',
+  `expires_at` DATETIME(6) NOT NULL COMMENT '过期时间',
+  `used_at` DATETIME(6) NULL COMMENT '使用时间',
+  `requested_ip` VARCHAR(50) NULL COMMENT '请求IP',
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_password_reset_token_hash` (`token_hash`),
+  KEY `ix_password_reset_user` (`user_id`),
+  CONSTRAINT `fk_password_reset_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='密码重置令牌表';
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================================

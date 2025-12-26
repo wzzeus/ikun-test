@@ -7,6 +7,12 @@ export const authApi = {
   register: (data) => api.post('/auth/register', data),
   login: (data) => api.post('/auth/login', data),
   refresh: () => api.post('/auth/refresh'),
+  forgotPassword: (data) => api.post('/auth/password/forgot', data),
+  resetPassword: (data) => api.post('/auth/password/reset', data),
+  changePassword: (data) => api.post('/auth/password/change', data),
+  setPassword: (data) => api.post('/auth/password/set', data),
+  bindLinuxDo: (data) => api.post('/auth/linuxdo/bind', data),
+  bindGitHub: (data) => api.post('/auth/github/bind', data),
 }
 
 /**

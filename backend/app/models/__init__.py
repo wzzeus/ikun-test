@@ -27,6 +27,7 @@ from app.models.achievement import (
 )
 from app.models.system_log import SystemLog, LogAction
 from app.models.request_log import RequestLog
+from app.models.password_reset import PasswordResetToken
 
 __all__ = [
     "Base",
@@ -64,4 +65,5 @@ __all__ = [
     "SystemLog",
     "LogAction",
     "RequestLog",
+    "PasswordResetToken",
 ]

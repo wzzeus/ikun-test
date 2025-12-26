@@ -38,21 +38,11 @@ services:
     container_name: chicken_king_backend
     ports:
       - "127.0.0.1:8000:8000"  # 仅绑定本地，通过 nginx 代理访问
+    env_file:
+      - ./.env
     environment:
-      - DATABASE_URL=mysql+aiomysql://root:${MYSQL_ROOT_PASSWORD:-password}@db:3306/${MYSQL_DATABASE:-chicken_king}
+      - DATABASE_URL=mysql+aiomysql://root:${MYSQL_ROOT_PASSWORD:-password}@db:3306/${MYSQL_DATABASE:-chicken_king}?charset=utf8mb4
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
-      - FRONTEND_URL=${FRONTEND_URL:-http://127.0.0.1:5173}
-      - MEDIA_ROOT=${MEDIA_ROOT:-/app/app/uploads/media}
-      - WORKER_API_TOKEN=${WORKER_API_TOKEN:-dev-worker-token}
-      - PROJECT_DOMAIN_SUFFIX=${PROJECT_DOMAIN_SUFFIX:-local}
-      - PROJECT_DOMAIN_TEMPLATE=${PROJECT_DOMAIN_TEMPLATE:-project-{submission_id}.{suffix}}
-      - LINUX_DO_CLIENT_ID=${LINUX_DO_CLIENT_ID:-}
-      - LINUX_DO_CLIENT_SECRET=${LINUX_DO_CLIENT_SECRET:-}
-      - LINUX_DO_REDIRECT_URI=${LINUX_DO_REDIRECT_URI:-}
-      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
-      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
-      - GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI:-}
     depends_on:
       db:
         condition: service_healthy
@@ -69,23 +59,12 @@ services:
       dockerfile: Dockerfile
     container_name: chicken_king_worker
     command: ["python", "-m", "app.worker"]
+    env_file:
+      - ./.env
     environment:
-      - DATABASE_URL=mysql+aiomysql://root:${MYSQL_ROOT_PASSWORD:-password}@db:3306/${MYSQL_DATABASE:-chicken_king}
+      - DATABASE_URL=mysql+aiomysql://root:${MYSQL_ROOT_PASSWORD:-password}@db:3306/${MYSQL_DATABASE:-chicken_king}?charset=utf8mb4
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=${SECRET_KEY:-dev-secret-key-change-in-production}
-      - WORKER_API_TOKEN=${WORKER_API_TOKEN:-dev-worker-token}
       - WORKER_API_BASE_URL=http://backend:8000
-      - WORKER_HEALTHCHECK_ENABLED=${WORKER_HEALTHCHECK_ENABLED:-false}
-      - WORKER_DOCKER_HOST=${WORKER_DOCKER_HOST:-unix:///var/run/docker.sock}
-      - WORKER_DEPLOY_NETWORK=${WORKER_DEPLOY_NETWORK:-}
-      - WORKER_PROJECT_PORT=${WORKER_PROJECT_PORT:-8080}
-      - WORKER_CONTAINER_MEMORY_LIMIT=${WORKER_CONTAINER_MEMORY_LIMIT:-1g}
-      - WORKER_CONTAINER_CPU_LIMIT=${WORKER_CONTAINER_CPU_LIMIT:-1.0}
-      - WORKER_CONTAINER_PIDS_LIMIT=${WORKER_CONTAINER_PIDS_LIMIT:-256}
-      - WORKER_CONTAINER_LOG_MAX_SIZE=${WORKER_CONTAINER_LOG_MAX_SIZE:-10m}
-      - WORKER_CONTAINER_LOG_MAX_FILE=${WORKER_CONTAINER_LOG_MAX_FILE:-3}
-      - PROJECT_DOMAIN_SUFFIX=${PROJECT_DOMAIN_SUFFIX:-local}
-      - PROJECT_DOMAIN_TEMPLATE=${PROJECT_DOMAIN_TEMPLATE:-project-{submission_id}.{suffix}}
     depends_on:
       backend:
         condition: service_started

@@ -16,9 +16,32 @@ class Settings(BaseSettings):
     # 安全配置
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    RATE_LIMIT_STORAGE_URI: Optional[str] = None  # 为空则回退到 REDIS_URL
+    UPLOAD_DAILY_BYTES_LIMIT: int = 3 * 1024 * 1024 * 1024  # 单用户每日上传总量上限（字节）
+    SECURITY_CHALLENGE_MODE: str = "off"  # off/monitor/enforce
+    SECURITY_CHALLENGE_PROVIDER: str = "pow"  # pow/captcha/js/behavior
+    SECURITY_CHALLENGE_THRESHOLD: int = 20  # 触发挑战的请求次数阈值
+    SECURITY_CHALLENGE_WINDOW_SECONDS: int = 60  # 统计窗口
+    SECURITY_CHALLENGE_TTL_SECONDS: int = 300  # 挑战有效期
+    SECURITY_CHALLENGE_PASS_TTL_SECONDS: int = 1800  # 挑战通过后免验证时间
+    SECURITY_POW_DIFFICULTY: int = 4  # PoW 前导 0 个数（十六进制）
+    CAPTCHA_VERIFY_URL: Optional[str] = None
+    CAPTCHA_SECRET_KEY: Optional[str] = None
+    CAPTCHA_SITE_KEY: Optional[str] = None
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: int = 30  # 忘记密码重置链接有效期（分钟）
+    SMTP_HOST: Optional[str] = None  # SMTP 服务器地址
+    SMTP_PORT: int = 587  # SMTP 端口
+    SMTP_USERNAME: Optional[str] = None  # SMTP 账号
+    SMTP_PASSWORD: Optional[str] = None  # SMTP 密码
+    SMTP_USE_TLS: bool = True  # 是否启用 STARTTLS
+    SMTP_USE_SSL: bool = False  # 是否启用 SSL（如 465 端口）
+    SMTP_FROM_EMAIL: Optional[str] = None  # 发件人邮箱
+    SMTP_FROM_NAME: Optional[str] = None  # 发件人显示名（可选）
+    TRUSTED_PROXY_ENABLED: bool = False  # TODO: 接入 CDN/WAF 后开启
+    TRUSTED_PROXY_HEADERS: str = "cf-connecting-ip,x-forwarded-for,x-real-ip"
 
     # 数据库配置 (MySQL)
-    DATABASE_URL: str = "mysql+aiomysql://root:password@localhost:3306/chicken_king"
+    DATABASE_URL: str = "mysql+aiomysql://root:password@localhost:3306/chicken_king?charset=utf8mb4"
 
     # Redis 配置
     REDIS_URL: str = "redis://localhost:6379/0"

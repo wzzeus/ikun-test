@@ -31,6 +31,7 @@ from fastapi import (
     Form,
     Header,
     HTTPException,
+    Request,
     Query,
     UploadFile,
     status,
@@ -41,6 +42,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.rate_limit import limiter, RateLimits
 from app.core.security import decode_token
 from app.models.contest import Contest, ContestPhase
 from app.models.registration import Registration, RegistrationStatus
@@ -64,6 +66,8 @@ from app.schemas.submission import (
     SubmissionValidateResponse,
     ValidationError,
 )
+from app.services.security_challenge import guard_challenge
+from app.services.upload_quota import commit_upload_quota, ensure_upload_quota
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -565,6 +569,8 @@ async def list_submissions(
         elif not is_privileged:
             # 普通用户只能看已通过的
             query = query.where(Submission.status == SubmissionStatus.APPROVED.value)
+            query = query.join(Registration, Registration.id == Submission.registration_id)
+            query = query.where(Registration.status != RegistrationStatus.WITHDRAWN.value)
 
     # 统计总数（复用相同的过滤条件，但不含分页）
     count_query = select(func.count(Submission.id))
@@ -591,6 +597,8 @@ async def list_submissions(
             count_query = count_query.where(Submission.status == status_filter)
         elif not is_privileged:
             count_query = count_query.where(Submission.status == SubmissionStatus.APPROVED.value)
+            count_query = count_query.join(Registration, Registration.id == Submission.registration_id)
+            count_query = count_query.where(Registration.status != RegistrationStatus.WITHDRAWN.value)
 
     count_result = await db.execute(count_query)
     total = count_result.scalar() or 0
@@ -798,7 +806,9 @@ async def delete_submission(
     summary="初始化附件上传",
     description="初始化附件上传，返回上传URL和附件ID。",
 )
+@limiter.limit(RateLimits.UPLOAD)
 async def init_attachment_upload(
+    request: Request,
     submission_id: int,
     payload: AttachmentInitRequest,
     db: AsyncSession = Depends(get_db),
@@ -809,6 +819,8 @@ async def init_attachment_upload(
     ensure_owner(submission, current_user)
     ensure_editable(submission)
 
+    await guard_challenge(request, scope="upload", user_id=current_user.id)
+
     attachment_type = payload.type.value
     max_size = MAX_SIZE_BY_TYPE.get(attachment_type, 50 * 1024 * 1024)
 
@@ -818,6 +830,8 @@ async def init_attachment_upload(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"文件过大，该类型附件最大允许 {max_size // (1024 * 1024)} MB"
         )
+
+    await ensure_upload_quota(current_user.id, "submission", payload.size_bytes)
 
     # 检查 MIME 类型
     allowed_types = ALLOWED_MIME_TYPES.get(attachment_type, set())
@@ -873,7 +887,9 @@ async def init_attachment_upload(
     summary="完成附件上传",
     description="上传文件并完成附件上传。使用 multipart/form-data。",
 )
+@limiter.limit(RateLimits.UPLOAD)
 async def complete_attachment_upload(
+    request: Request,
     submission_id: int,
     attachment_id: int,
     file: UploadFile = File(...),
@@ -884,6 +900,8 @@ async def complete_attachment_upload(
     submission = await get_submission_or_404(db, submission_id, load_attachments=True)
     ensure_owner(submission, current_user)
     ensure_editable(submission)
+
+    await guard_challenge(request, scope="upload", user_id=current_user.id)
 
     # 查找附件
     attachment = next(
@@ -944,6 +962,12 @@ async def complete_attachment_upload(
                 await out_file.write(chunk)
     finally:
         await file.close()
+
+    try:
+        await commit_upload_quota(current_user.id, "submission", total_bytes)
+    except HTTPException:
+        dest_path.unlink(missing_ok=True)
+        raise
 
     # 更新附件记录
     attachment.content_type = actual_content_type

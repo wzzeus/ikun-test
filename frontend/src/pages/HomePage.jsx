@@ -114,7 +114,7 @@ export default function HomePage() {
         <RulesSection />
       )}
       {hasFaq && <MarkdownSection title="常见问题" content={contest?.faq_md} id="faq" />}
-      <CTASection />
+      <CTASection contestPhase={contest?.phase} />
     </>
   )
 }

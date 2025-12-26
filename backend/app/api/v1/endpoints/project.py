@@ -2,7 +2,6 @@
 作品与部署提交相关 API
 """
 from datetime import datetime, time
-import json
 import logging
 from typing import Optional, Tuple
 
@@ -28,6 +27,8 @@ from app.services.media_service import (
     ensure_local_media_urls,
     save_upload_file,
 )
+from app.services.worker_queue import enqueue_worker_action
+from app.services.security_challenge import guard_challenge
 from app.models.contest import Contest, ContestPhase
 from app.models.project import Project, ProjectStatus
 from app.models.project_like import ProjectLike
@@ -65,31 +66,6 @@ MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024
 ALLOWED_REGISTRIES = {"ghcr.io", "docker.io"}
 ALLOWED_REPO_HOSTS = ("https://github.com/", "https://gitee.com/")
 REPO_CHECK_TIMEOUT_SECONDS = 6.0
-
-
-async def enqueue_worker_action(action: str, submission_id: int) -> None:
-    """提交 Worker 任务"""
-    payload = json.dumps(
-        {"action": action, "submission_id": submission_id},
-        ensure_ascii=False,
-    )
-    redis_client = None
-    try:
-        redis_client = await get_redis()
-        await redis_client.rpush(settings.WORKER_QUEUE_KEY, payload)
-    except Exception as exc:
-        logger.warning(
-            "任务入队失败: action=%s, submission_id=%s, error=%s",
-            action,
-            submission_id,
-            exc,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="任务入队失败，请稍后重试",
-        ) from exc
-    finally:
-        await close_redis(redis_client)
 
 
 def require_admin(user: User) -> None:
@@ -454,6 +430,12 @@ async def list_projects(
     else:
         is_admin = current_user is not None and current_user.is_admin
         if not is_admin:
+            query = query.join(
+                Registration,
+                (Registration.contest_id == Project.contest_id)
+                & (Registration.user_id == Project.user_id),
+            )
+            query = query.where(Registration.status != RegistrationStatus.WITHDRAWN.value)
             query = query.where(Project.status == ProjectStatus.ONLINE.value)
 
     query = query.order_by(Project.id.desc())
@@ -701,7 +683,9 @@ async def update_project(
     response_model=ProjectResponse,
     summary="上传作品封面",
 )
+@limiter.limit(RateLimits.UPLOAD)
 async def upload_project_cover(
+    request: Request,
     project_id: int,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -711,7 +695,8 @@ async def upload_project_cover(
     project = await get_project_or_404(db, project_id)
     ensure_owner_or_admin(project, current_user)
 
-    media = await save_upload_file(file, "project-covers", MAX_COVER_BYTES)
+    await guard_challenge(request, scope="upload", user_id=current_user.id)
+    media = await save_upload_file(file, "project-covers", MAX_COVER_BYTES, owner_id=current_user.id)
     old_url = project.cover_image_url
     project.cover_image_url = media.url
     await db.commit()
@@ -749,7 +734,9 @@ async def delete_project_cover(
     response_model=ProjectResponse,
     summary="上传作品截图",
 )
+@limiter.limit(RateLimits.UPLOAD)
 async def upload_project_screenshot(
+    request: Request,
     project_id: int,
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db),
@@ -759,7 +746,8 @@ async def upload_project_screenshot(
     project = await get_project_or_404(db, project_id)
     ensure_owner_or_admin(project, current_user)
 
-    media = await save_upload_file(file, "project-screenshots", MAX_SCREENSHOT_BYTES)
+    await guard_challenge(request, scope="upload", user_id=current_user.id)
+    media = await save_upload_file(file, "project-screenshots", MAX_SCREENSHOT_BYTES, owner_id=current_user.id)
     urls = list(project.screenshot_urls or [])
     urls.append(media.url)
     project.screenshot_urls = urls

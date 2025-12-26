@@ -14,6 +14,7 @@ from app.api.v1.endpoints.submission import get_current_user
 from app.core.database import get_db
 from app.core.rate_limit import limiter, RateLimits
 from app.models.contest import Contest, ContestPhase
+from app.models.registration import Registration, RegistrationStatus
 from app.models.submission import Submission, SubmissionStatus
 from app.models.task import TaskType
 from app.models.user import User
@@ -104,6 +105,27 @@ async def vote_submission(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="作品未通过审核，暂不可投票",
+        )
+
+    registration = None
+    if submission.registration_id:
+        result = await db.execute(
+            select(Registration).where(Registration.id == submission.registration_id)
+        )
+        registration = result.scalar_one_or_none()
+    else:
+        result = await db.execute(
+            select(Registration).where(
+                Registration.contest_id == submission.contest_id,
+                Registration.user_id == submission.user_id,
+            )
+        )
+        registration = result.scalar_one_or_none()
+
+    if registration is not None and registration.status == RegistrationStatus.WITHDRAWN.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="作品已撤回报名，暂不可投票",
         )
 
     contest = await get_contest_or_404(db, submission.contest_id)
