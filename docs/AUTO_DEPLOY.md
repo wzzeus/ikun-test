@@ -6,28 +6,34 @@
 
 ## 架构图
 
-```
-┌─────────────┐     push      ┌─────────────┐
-│   本地开发   │ ───────────▶ │   GitHub    │
-└─────────────┘               └──────┬──────┘
-                                     │ webhook
-                                     ▼
-┌────────────────────────────────────────────────────────┐
-│                    服务器 (Ubuntu)                      │
-│  ┌─────────────────────────────────────────────────┐  │
-│  │              Docker 容器                          │  │
-│  │                                                   │  │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐       │  │
-│  │  │  nginx   │  │ backend  │  │ frontend │       │  │
-│  │  │  :80/443 │  │  :8000   │  │   :80    │       │  │
-│  │  └────┬─────┘  └──────────┘  └──────────┘       │  │
-│  │       │                                          │  │
-│  │  ┌────┴─────┐  ┌──────────┐  ┌──────────┐       │  │
-│  │  │ webhook  │  │   mysql  │  │  redis   │       │  │
-│  │  │  :9000   │  │  :3306   │  │  :6379   │       │  │
-│  │  └──────────┘  └──────────┘  └──────────┘       │  │
-│  └─────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  subgraph Deploy["部署链路"]
+    Dev[开发者] -->|git push| GitHub[GitHub]
+    GitHub -->|webhook| WebhookDeploy[webhook:9000]
+    WebhookDeploy -->|deploy.sh| Compose[docker compose]
+    Compose --> Stack[nginx / backend / frontend / worker / db / redis / traefik]
+  end
+
+  subgraph Runtime["运行链路（请求）"]
+    Browser[浏览器] -->|https://<your-domain>| Nginx[nginx:80/443]
+    Nginx -->|/| Frontend[frontend:80]
+    Nginx -->|/api/*| Backend[backend:8000]
+    Backend --> MySQL[mysql:3306]
+    Backend --> Redis[redis:6379]
+    Nginx -->|/webhook| WebhookRuntime[webhook:9000]
+    Nginx -->|project-*| Traefik[traefik:8081]
+    Traefik --> Project[项目容器]
+  end
+
+  subgraph WorkerTask["后台任务"]
+    Worker[worker] -->|调用 API| BackendTask[backend:8000]
+    Worker --- DockerSock[/var/run/docker.sock/]
+  end
+
+  subgraph Optional["可选"]
+    Umami[umami:3000] --> UmamiDB[umami-db:5432]
+  end
 ```
 
 ## 工作流程
@@ -180,11 +186,11 @@ docker exec -i chicken_king_db mysql -uroot -ppassword chicken_king < chicken_ki
 ```
 /opt/chicken-king/
 ├── .env                        # 生产环境配置（手动维护）
-├── docker-compose.yml          # 主项目容器编排
-├── chicken_king_dump.sql       # 数据库备份
+├── docker-compose.prod.yml     # 生产环境编排（部署使用）
+├── docker-compose.yml          # 本地开发编排（可选）
 ├── backend/                    # FastAPI 后端
 ├── frontend/                   # React 前端（生产模式用 nginx）
-├── nginx/
+├── nginx/                      # Nginx 反向代理
 │   ├── nginx.prod.conf         # Nginx 生产配置
 │   ├── ssl/                    # SSL 证书
 │   └── logs/                   # Nginx 日志

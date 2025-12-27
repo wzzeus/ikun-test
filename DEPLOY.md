@@ -6,6 +6,8 @@
 鸡王争霸赛/
 ├── docker-compose.prod.yml    # 生产环境编排
 ├── .env.production.example    # 环境变量模板（复制为 .env）
+├── deploy/
+│   └── webhook/               # GitHub Webhook 自动部署
 ├── nginx/
 │   ├── nginx.prod.conf        # Nginx 反向代理配置
 │   ├── ssl/                   # SSL 证书目录

@@ -46,7 +46,13 @@
 │   ├── sql/               # 数据库迁移脚本
 │   └── requirements.txt
 │
-└── docker-compose.yml     # Docker 编排（含 Umami）
+├── deploy/                # 部署脚本与 Webhook 服务
+│   └── webhook/           # GitHub Webhook 自动部署
+├── nginx/                 # Nginx 生产反代
+├── docs/                  # 项目文档
+├── docker-compose.yml     # 本地开发编排
+├── docker-compose.prod.yml # 生产环境编排
+└── .env.production.example # 生产环境变量模板
 ```
 
 ## 技术栈
