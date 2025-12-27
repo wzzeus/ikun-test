@@ -77,20 +77,23 @@ docker compose -f docker-compose.prod.yml -f docker-compose.yml up -d --build
 
 > 说明：组合 `docker-compose.prod.yml` 与 `docker-compose.yml` 用于让 nginx 连接到 Webhook 网络。
 
-### 4. 初始化数据库
+### 4. 初始化数据库（自动）
 
-```bash
-# 等待 MySQL 启动
-sleep 20
+后端容器启动时会自动执行数据库迁移：
 
-# 导入数据库（如有备份）
-docker exec -i chicken_king_db mysql -uroot -ppassword chicken_king < /opt/chicken-king/chicken_king_dump.sql
+- **空库**：自动导入 `backend/sql/production_clean_db.sql`（如不存在则回退 `schema.sql` + `seed_production_config.sql`）
+- **已有库**：自动扫描 `backend/sql/NNN_*.sql` 并执行未记录的迁移
 
-# 或导入初始结构
-docker exec -i chicken_king_db mysql -uroot -ppassword chicken_king < /opt/chicken-king/backend/sql/schema.sql
+如需关闭自动迁移，可在 `.env` 中设置：
 
-# 若为旧库升级，需执行互动表迁移
-docker exec -i chicken_king_db mysql -uroot -ppassword chicken_king < /opt/chicken-king/backend/sql/029_project_interactions.sql
+```
+AUTO_MIGRATE=false
+```
+
+如旧库没有 `schema_migrations` 表且已执行过部分迁移，可设置基线避免重复执行：
+
+```
+MIGRATION_BASELINE_VERSION=034
 ```
 
 ### 5. 启动 Webhook 服务

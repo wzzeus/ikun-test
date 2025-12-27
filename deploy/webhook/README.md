@@ -149,3 +149,12 @@ bash deploy/webhook/deploy.sh
 - 部署时间
 - 环境信息
 - 健康检查状态
+
+---
+
+## 补充说明
+
+- 主项目 `.env` 需要配置 `WORKER_API_TOKEN`，用于 Worker 回写状态鉴权。
+- 生产 Nginx 证书需放在 `/opt/chicken-king/nginx/ssl`（`fullchain.pem` + `privkey.pem`）。
+- 首次部署会导入 `production_clean_db.sql` 并跳过增量迁移，请保证该文件为最新结构。
+

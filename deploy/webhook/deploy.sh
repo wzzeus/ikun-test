@@ -393,14 +393,20 @@ fi
 # 使用现有密码或默认密码（用于迁移连接）
 MYSQL_ROOT_PASSWORD="${EXISTING_MYSQL_ROOT_PASSWORD:-password}"
 MYSQL_PASSWORD="${EXISTING_MYSQL_PASSWORD:-password}"
+AUTO_MIGRATE_FLAG="$(grep "^AUTO_MIGRATE=" "$ENV_FILE" | cut -d'=' -f2- | tr '[:upper:]' '[:lower:]')"
+AUTO_MIGRATE_FLAG="${AUTO_MIGRATE_FLAG:-false}"
 
 # 3. 重建并重启容器
 log "重建并重启容器以应用最新代码..."
 $COMPOSE_CMD up -d --build
 
 # 4. 容器重启后执行数据库迁移（健康检查前）
-log "执行数据库迁移..."
-run_migrations
+if [ "$AUTO_MIGRATE_FLAG" = "true" ]; then
+    log "检测到 AUTO_MIGRATE=true，跳过 deploy.sh 内置迁移"
+else
+    log "执行数据库迁移..."
+    run_migrations
+fi
 
 # 5. 等待服务启动并健康检查
 log "等待服务启动..."

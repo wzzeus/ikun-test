@@ -1,6 +1,7 @@
 # 数据库迁移自动化
 
-部署脚本现在会在每次部署时自动执行数据库迁移，确保数据库 schema 与代码保持同步。
+默认由后端容器启动时自动执行数据库迁移（`AUTO_MIGRATE=true`），确保数据库 schema 与代码保持同步。
+如需仍由 `deploy/webhook/deploy.sh` 执行迁移，可设置 `AUTO_MIGRATE=false`。
 
 ## 工作原理
 
@@ -8,9 +9,9 @@
 
 **当数据库为空时**，自动导入 `backend/sql/production_clean_db.sql`：
 
-- ✅ 50个表结构
-- ✅ 配置数据（比赛、成就、任务、抽奖、扭蛋、积分商城等）
-- ✅ 示例报名项目（API Key Tool，包含完整的 GitHub 仓库和 API Key）
+- 50个表结构
+- 配置数据（比赛、成就、任务、抽奖、扭蛋、积分商城等）
+- 示例报名项目（API Key Tool，包含完整的 GitHub 仓库和 API Key）
 
 **兼容性**：如果找不到 `production_clean_db.sql`，会回退到旧方式：
 1. 执行 `schema.sql`（表结构）
