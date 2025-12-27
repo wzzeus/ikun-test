@@ -148,11 +148,12 @@ docker-compose up -d
 生产环境可使用（与自动部署保持一致）：
 
 ```bash
-docker compose -f docker-compose.prod.yml -f docker-compose.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-> 说明：`docker-compose.yml` / `docker-compose.prod.yml` 都会从项目根目录读取 `.env`，
-> 并通过 `env_file` 注入到容器中。`DATABASE_URL/REDIS_URL` 由 Compose 组合生成，无需在 `.env` 中重复填写。
+> 说明：生产环境只使用 `docker-compose.prod.yml`，避免与开发配置互相覆盖。
+> `.env` 由 Compose 自动读取并注入到容器中，`DATABASE_URL/REDIS_URL` 由 Compose 组合生成，无需在 `.env` 中重复填写。
+> 后端容器启动时会自动执行迁移（`AUTO_MIGRATE=true`）。
 
 > 生产环境建议使用 GitHub Webhook 自动部署，详见 `docs/AUTO_DEPLOY.md`。
 

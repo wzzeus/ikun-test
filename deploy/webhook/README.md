@@ -77,7 +77,7 @@ sudo nginx -t && sudo systemctl reload nginx
 1. 打开仓库：https://github.com/deijing/ikun
 2. 进入 **Settings** → **Webhooks** → **Add webhook**
 3. 填写配置：
-   - **Payload URL**: `https://pk.ikuncode.cc/webhook`
+   - **Payload URL**: `https://<your-domain>/webhook`
    - **Content type**: `application/json`
    - **Secret**: 填入你生成的密钥（与服务器 .env 中的一致）
    - **Which events**: 选择 `Just the push event`
@@ -88,12 +88,12 @@ sudo nginx -t && sudo systemctl reload nginx
 
 1. 检查 Webhook 服务状态：
 ```bash
-curl https://pk.ikuncode.cc/webhook/health
+curl https://<your-domain>/webhook/health
 ```
 
 2. 查看部署日志：
 ```bash
-curl https://pk.ikuncode.cc/logs
+curl https://<your-domain>/logs
 # 或者
 cat /opt/chicken-king/deploy/webhook/logs/deploy.log
 ```

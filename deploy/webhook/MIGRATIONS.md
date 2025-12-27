@@ -32,9 +32,9 @@ CREATE TABLE schema_migrations (
 );
 ```
 
-### 3. 执行流程
+### 3. 执行流程（AUTO_MIGRATE=true）
 
-部署脚本会在**容器重启后、健康检查前**自动执行：
+后端容器 entrypoint 在启动时自动执行，部署脚本仅负责触发重建并等待健康检查：
 
 1. 等待 MySQL 就绪（最多 30 秒）
 2. 检查数据库表数量
@@ -78,7 +78,7 @@ tail -f /opt/chicken-king/deploy/webhook/logs/migrations.log
 cat /opt/chicken-king/deploy/webhook/logs/deploy.log
 
 # 或通过 Web 接口
-curl https://pk.ikuncode.cc/logs
+curl https://<your-domain>/logs
 ```
 
 ### 查询已执行的迁移
@@ -189,7 +189,7 @@ lsof /tmp/chicken_king_migrations.lock  # 查看哪个进程持有锁
 cd /opt/chicken-king
 
 # 手动执行迁移脚本（查看源码了解更多）
-# 注意：通常不需要手动执行，部署时会自动运行
+# 注意：默认由后端容器启动时自动执行；如需强制手动执行，请先临时将 AUTO_MIGRATE=false
 bash deploy/webhook/deploy.sh
 ```
 

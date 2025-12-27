@@ -19,7 +19,7 @@
 │  │                                                   │  │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐       │  │
 │  │  │  nginx   │  │ backend  │  │ frontend │       │  │
-│  │  │  :80/443 │  │  :8000   │  │  :5174   │       │  │
+│  │  │  :80/443 │  │  :8000   │  │   :80    │       │  │
 │  │  └────┬─────┘  └──────────┘  └──────────┘       │  │
 │  │       │                                          │  │
 │  │  ┌────┴─────┐  ┌──────────┐  ┌──────────┐       │  │
@@ -33,7 +33,7 @@
 ## 工作流程
 
 1. **开发者推送代码** → `git push origin main`
-2. **GitHub 发送 Webhook** → `POST https://pk.ikuncode.cc/webhook`
+2. **GitHub 发送 Webhook** → `POST https://<your-domain>/webhook`
 3. **Webhook 服务验证签名** → 触发 `deploy/webhook/deploy.sh`
 4. **拉取最新代码** → `git fetch && git reset --hard origin/main`
 5. **重建 Docker 容器** → `docker compose -f docker-compose.prod.yml up -d --build`
@@ -50,7 +50,7 @@
 ```bash
 # 克隆代码
 cd /opt
-git clone https://github.com/deijing/ikun.git chicken-king
+git clone https://github.com/dejing/ikun.git chicken-king
 cd /opt/chicken-king
 ```
 
@@ -114,10 +114,10 @@ docker compose up -d --build
 
 ### 6. 配置 GitHub Webhook
 
-1. 访问 `https://github.com/deijing/ikun/settings/hooks`
+1. 访问 `https://github.com/dejing/ikun/settings/hooks`
 2. 点击 "Add webhook"
 3. 配置：
-   - **Payload URL**: `https://pk.ikuncode.cc/webhook`
+   - **Payload URL**: `https://<your-domain>/webhook`
    - **Content type**: `application/json`（必须！）
    - **Secret**: 与 `/opt/chicken-king/deploy/webhook/.env` 中的 `WEBHOOK_SECRET` 一致
    - **Events**: Just the push event
