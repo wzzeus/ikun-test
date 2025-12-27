@@ -10,7 +10,7 @@
 ## Worker 回写 Token
 - `WORKER_API_TOKEN` 是 Worker 回写状态接口的鉴权 Token，缺失会导致 Worker 启动后持续报错。
 - 修改 `.env` 后需要 **重建** 容器（不是简单 `docker restart`）：
-  - `docker compose -f docker-compose.prod.yml -f docker-compose.yml up -d --force-recreate backend worker`
+- `docker compose -f docker-compose.prod.yml up -d --force-recreate backend worker`
 
 ## 初始库导入与迁移
 - 首次部署会导入 `backend/sql/production_clean_db.sql` 并**标记历史迁移已执行**。
@@ -22,4 +22,3 @@
 ## 网络创建冲突
 - `docker-compose.prod.yml` 会创建 `chicken-king_chicken_king_network`。
 - 不要提前手动 `docker network create chicken-king_chicken_king_network`，否则会触发 label 冲突导致 `compose up` 失败。
-

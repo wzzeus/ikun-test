@@ -339,8 +339,8 @@ else
     DOCKER_COMPOSE="docker-compose"
 fi
 
-# Compose 文件（与线上部署保持一致）
-COMPOSE_FILES="-f docker-compose.prod.yml -f docker-compose.yml"
+# Compose 文件（线上部署使用生产配置）
+COMPOSE_FILES="-f docker-compose.prod.yml"
 COMPOSE_CMD="$DOCKER_COMPOSE $COMPOSE_FILES"
 
 # 确保日志目录存在

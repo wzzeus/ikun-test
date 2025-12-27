@@ -36,7 +36,7 @@
 2. **GitHub 发送 Webhook** → `POST https://pk.ikuncode.cc/webhook`
 3. **Webhook 服务验证签名** → 触发 `deploy/webhook/deploy.sh`
 4. **拉取最新代码** → `git fetch && git reset --hard origin/main`
-5. **重建 Docker 容器** → `docker compose -f docker-compose.prod.yml -f docker-compose.yml up -d --build`
+5. **重建 Docker 容器** → `docker compose -f docker-compose.prod.yml up -d --build`
 6. **执行数据库迁移** → 自动跟踪版本
 7. **健康检查** → 后端/前端检查
 8. **清理旧镜像** → `docker image prune -f`
@@ -72,10 +72,10 @@ nano .env
 
 ```bash
 cd /opt/chicken-king
-docker compose -f docker-compose.prod.yml -f docker-compose.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-> 说明：组合 `docker-compose.prod.yml` 与 `docker-compose.yml` 用于让 nginx 连接到 Webhook 网络。
+> 说明：生产环境仅使用 `docker-compose.prod.yml`，会自动创建 `chicken-king_chicken_king_network` 网络供 webhook 使用。
 
 ### 4. 初始化数据库（自动）
 
