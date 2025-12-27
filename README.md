@@ -6,7 +6,9 @@
 
 ## 功能特性
 
-- **Linux.do OAuth 登录** - 一键授权登录
+- **本地账号** - 注册/登录/找回密码
+- **第三方登录/绑定** - Linux.do / GitHub OAuth
+- **账号安全** - 修改/设置密码、绑定冲突提示
 - **比赛报名** - 选手报名与审核
 - **作品提交** - 支持附件上传
 - **投票系统** - 为喜欢的作品投票
@@ -143,14 +145,16 @@ cp .env.production.example .env
 docker-compose up -d
 ```
 
-生产环境可使用：
+生产环境可使用（与自动部署保持一致）：
 
 ```bash
-docker-compose -f docker-compose.prod.yml up -d
+docker compose -f docker-compose.prod.yml -f docker-compose.yml up -d --build
 ```
 
 > 说明：`docker-compose.yml` / `docker-compose.prod.yml` 都会从项目根目录读取 `.env`，
 > 并通过 `env_file` 注入到容器中。`DATABASE_URL/REDIS_URL` 由 Compose 组合生成，无需在 `.env` 中重复填写。
+
+> 生产环境建议使用 GitHub Webhook 自动部署，详见 `docs/AUTO_DEPLOY.md`。
 
 ## 网站统计（Umami）
 
@@ -222,6 +226,8 @@ GITHUB_CLIENT_SECRET=xxx
 GITHUB_TOKEN=xxx
 ```
 
+> 其他配置项（如 SMTP、触发式安全挑战、上传配额、Worker 等）详见 `backend/.env.example`。
+
 ### 前端 (`frontend/.env`)
 
 ```bash
@@ -256,7 +262,7 @@ docker-compose down                 # 停止所有服务
 
 | 模块 | 前缀 | 功能 |
 |------|------|------|
-| auth | `/auth` | Linux.do/GitHub OAuth |
+| auth | `/auth` | 本地注册/登录/刷新/找回密码 + Linux.do/GitHub OAuth 绑定 |
 | users | `/users` | 用户信息、成就 |
 | contests | `/contests` | 比赛管理 |
 | submissions | `/submissions` | 作品提交 |
